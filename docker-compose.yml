@@ -1,0 +1,92 @@
+# ==============================================================================
+# TONETRACE AI — LOCAL INFRASTRUCTURE DOCKER COMPOSE
+# ==============================================================================
+# NOTE: This compose file is designed solely for LOCAL DEVELOPMENT.
+# The Elasticsearch setup uses single-node mode with security features disabled
+# for ease of local prototyping. THIS CONFIGURATION IS NOT PRODUCTION-SECURE.
+# In production, utilize managed, clustered, and TLS-secured search and Neon DB.
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Elasticsearch 8.x (Single-Node Dev Search Engine)
+  # Minimum host RAM recommendation: 4GB available RAM (1GB allocated to ES)
+  # ----------------------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: tonetrace-elasticsearch
+    environment:
+      - node.name=tonetrace-es-dev
+      - cluster.name=tonetrace-dev-cluster
+      - discovery.type=single-node
+      # IMPORTANT: Security disabled ONLY for local dev simplicity. NOT FOR PRODUCTION.
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      # Heap sizing: 512MB initial, 512MB max to prevent local laptop memory hogging
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health?local=true || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # Optional Local PostgreSQL (Fallback for offline development)
+  # Primary production database target remains Neon PostgreSQL.
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: tonetrace-postgres-local
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tonetrace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tonetrace_dev_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-tonetrace_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tonetrace -d tonetrace_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # ToneTrace Backend API Application
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tonetrace-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app:ro
+    restart: unless-stopped
+
+volumes:
+  es_data:
+    driver: local
+  pg_data:
+    driver: local
