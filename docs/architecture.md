@@ -158,3 +158,27 @@ Commercial retail availability (merchant name, purchase URL, stock status, and p
 ### 5.3 Zero Data Fabrication & Resilient External Adapters
 - **Open Beauty Facts**: Uses the official v2 API (`/api/v2/product/{barcode}.json`) with custom `User-Agent` and ODbL v1.0 attribution metadata. Missing fields remain `None` rather than fabricated. Status 429 triggers `OpenBeautyFactsRateLimitError` and upstream downtime triggers `OpenBeautyFactsUnavailableError`.
 - **Channel3**: Bound behind a dedicated provider adapter. When `CHANNEL3_API_KEY` is not present, the system honestly reports `is_configured = False` and rejects calls with `Channel3NotConfiguredError`, refusing to fabricate mock endpoints or fake contracts.
+
+---
+
+## 6. Key Architectural Decisions (Phase 5 OCR & Label Scanning)
+
+### 6.1 Private Object Storage & Signed URLs
+Product label scans may contain sensitive user background details or private photos. Files are never stored under public web roots or exposed via static public URLs:
+- `LocalStorageProvider`: Stores files in an unexposed local directory with strict path-traversal immunity (`ValueError` raised if paths escape root). Viewing URLs are generated using HMAC-SHA256 signatures with expiration timestamps (`exp`), validated in constant time via `hmac.compare_digest`.
+- `S3StorageProvider`: Built for S3-compatible cloud object storage (e.g. Cloudflare R2), generating time-bounded pre-signed URLs.
+
+### 6.2 Multi-Adapter Replaceable OCR Architecture
+- **Online OCR (OCR.space Free API)**: Live verification confirmed the user's provided credentials map to the OCR.space Free API at `https://api.ocr.space/parse/image`. The adapter implements multipart form upload, handles HTTP 429 rate limits, and extracts execution timings.
+- **Local OCR (Tesseract)**: Engine candidate checking for local binary availability and reporting diagnostic guidance when not installed.
+- **Deterministic Mock**: High-confidence deterministic responses for automated test suites and offline local development.
+
+### 6.3 Untrusted Text Handling & Candidate Segmentation
+- OCR output is inherently error-prone and untrusted. The full raw text is quarantined in `ocr_jobs.raw_text` and preserved unmodified.
+- Candidate ingredients are conservatively segmented by commas, semicolons, bullets, and line breaks while stripping packaging boilerplate (e.g. "Active Ingredients:", percentages, asterisks).
+- Segmented candidates are automatically cross-referenced against authoritative PostgreSQL `ingredients` (by INCI or common name) and `ingredient_aliases`. Unmatched items remain unverified candidates.
+
+### 6.4 Human-in-the-Loop Review & Strict Data Isolation
+- Scanned ingredient lists are provisional until explicitly reviewed and confirmed by the user via `POST /api/v1/ocr/scans/{scan_id}/confirm`.
+- Users can modify normalized names, correct OCR misreadings, and add omitted ingredients.
+- All media assets and scan jobs enforce strict tenant isolation (`job.user_id == current_user.id`), returning HTTP 404 on any unauthorized cross-user inspection or confirmation attempts.

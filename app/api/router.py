@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.routes import auth, catalog, health, me, search
+from app.api.routes import auth, catalog, health, me, ocr, search
 
 api_router = APIRouter()
 
@@ -20,3 +20,6 @@ api_router.include_router(search.router)
 
 # Phase 4 Product and Ingredient Catalogue
 api_router.include_router(catalog.router)
+
+# Phase 5 OCR and Product-Label Scanning
+api_router.include_router(ocr.router)

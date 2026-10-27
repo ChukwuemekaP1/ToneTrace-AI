@@ -30,6 +30,14 @@ from app.schemas.health import (
     LivenessResponse,
     ReadinessResponse,
 )
+from app.schemas.ocr import (
+    ConfirmIngredientItem,
+    ConfirmScanRequest,
+    ConfirmScanResponse,
+    MediaAssetResponse,
+    OCRCandidateIngredientResponse,
+    OCRScanResponse,
+)
 from app.schemas.profile import (
     MeSummaryResponse,
     SkinProfileResponse,
@@ -52,6 +60,9 @@ from app.schemas.search import (
 __all__ = [
     "AuthSuccessResponse",
     "BrandResponse",
+    "ConfirmIngredientItem",
+    "ConfirmScanRequest",
+    "ConfirmScanResponse",
     "DataSourceResponse",
     "DependencyStatus",
     "ErrorDetail",
@@ -65,6 +76,9 @@ __all__ = [
     "IntegrationStatusResponse",
     "LivenessResponse",
     "MeSummaryResponse",
+    "MediaAssetResponse",
+    "OCRCandidateIngredientResponse",
+    "OCRScanResponse",
     "PaginationMeta",
     "ProductDetailResponse",
     "ProductIngredientItemResponse",

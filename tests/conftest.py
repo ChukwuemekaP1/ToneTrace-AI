@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite://"
 os.environ["ALLOW_DEV_AUTH_BYPASS"] = "false"
+os.environ["OCR_PROVIDER"] = "mock"
 
 from app.core.config import Settings, get_settings
 from app.db.base import Base
@@ -40,6 +41,9 @@ def test_settings() -> Settings:
         REFRESH_TOKEN_TTL_DAYS=7,
         PASSWORD_MIN_LENGTH=8,
         AUTH_RATE_LIMIT_ENABLED=True,
+        OCR_PROVIDER="mock",
+        STORAGE_PROVIDER="local",
+        STORAGE_LOCAL_DIR="./var/test_storage",
     )
     get_settings.cache_clear()
     return settings

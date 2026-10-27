@@ -117,9 +117,10 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------------------
     # 6. OCR (Ingredient & Product Scanning)
     # --------------------------------------------------------------------------
-    OCR_PROVIDER: str = "google_cloud_vision"
+    OCR_PROVIDER: Literal["ocr_space", "tesseract", "mock"] = "mock"
     OCR_API_KEY: SecretStr | None = None
-    OCR_ENDPOINT_URL: str | None = None
+    OCR_BASE_URL: str = "https://api.ocr.space/parse/image"
+    TESSERACT_CMD_PATH: str | None = None
 
     # --------------------------------------------------------------------------
     # 7. External Product Catalog Data (Open Beauty Facts & Channel3)
@@ -140,7 +141,11 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------------------
     # 9. Cloud Object Storage
     # --------------------------------------------------------------------------
-    STORAGE_PROVIDER: Literal["s3", "gcs", "local"] = "s3"
+    STORAGE_PROVIDER: Literal["s3", "gcs", "local"] = "local"
+    STORAGE_LOCAL_DIR: str = "local_data/storage"
+    STORAGE_SIGNING_SECRET: SecretStr = SecretStr(
+        "tonetrace-storage-signing-secret-change-in-prod-12345"
+    )
     STORAGE_BUCKET_NAME: str | None = None
     STORAGE_REGION: str = "us-east-1"
     STORAGE_ENDPOINT_URL: str | None = None
@@ -151,6 +156,7 @@ class Settings(BaseSettings):
     # 10. Upload Constraints & Security Limits
     # --------------------------------------------------------------------------
     UPLOAD_MAX_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB default
+    UPLOAD_MAX_IMAGE_DIMENSION: int = 4096
     UPLOAD_ALLOWED_MIME_TYPES: list[str] = [
         "image/jpeg",
         "image/png",

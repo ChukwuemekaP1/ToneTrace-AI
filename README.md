@@ -16,7 +16,8 @@ ToneTrace AI is an intelligent skincare companion backend platform. Engineered f
 - **Persistence & Migrations**: SQLAlchemy 2.0 (Async Engine via `psycopg 3`), Alembic
 - **Database Target**: Neon Serverless PostgreSQL (remote), with dual-URL pooling configuration
 - **Local Infrastructure**: Docker Compose running single-node Elasticsearch 8.x for local search indexing
-- **Quality & Testing**: Pytest (86 automated tests), pytest-asyncio, HTTPX, and Ruff (linter/formatter)
+- **OCR & Product-Label Scanning**: Replaceable OCR subsystem (verified OCR.space Free API adapter, local Tesseract candidate, deterministic mock adapter), private object storage with HMAC-SHA256 time-bounded signed URLs, conservative candidate segmentation, and human review workflows.
+- **Quality & Testing**: Pytest (104 automated tests), pytest-asyncio, HTTPX, and Ruff (linter/formatter)
 - **Dependency Management**: `pyproject.toml` managed with `uv` for reproducible, deterministic installs
 
 ---
@@ -220,7 +221,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - **Open Beauty Facts Adapter**: Official v2 adapter with rate limit backoff and ODbL v1.0 attribution.
 - **Channel3 Adapter**: Isolated provider contract adapter with honest unconfigured reporting when credentials are not supplied.
 
-#### Endpoints
+#### Catalogue Endpoints
 - `GET /api/v1/products/{product_id}` — Product detail with brand, variants, current formula, and offers.
 - `GET /api/v1/products/barcode/{barcode}` — Barcode lookup across SKUs.
 - `GET /api/v1/products/{product_id}/ingredients` — Ordered ingredient list for current or specific formula version.
@@ -228,6 +229,34 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `POST /api/v1/products/ingest/barcode/{barcode}` — Authenticated, rate-limited barcode ingestion.
 - `POST /api/v1/products/{product_id}/reformulate` — Record a new formulation version while preserving history.
 - `POST /api/v1/products/{product_id}/offers` — Record commercial merchant offer.
+
+### 5. OCR & Product-Label Scanning (Phase 5)
+
+- **Replaceable OCR Subsystem**:
+  - **Online OCR Adapter**: Verified integration with OCR.space Free API (`https://api.ocr.space/parse/image`) supporting multipart uploads, rate limit backoff (HTTP 429), and execution status handling.
+  - **Local OCR Adapter**: Host Tesseract engine candidate with binary detection and clear failure guidance.
+  - **Deterministic Mock Adapter**: Predictable candidate ingredient responses for offline development and CI.
+- **Private Object Storage**:
+  - Files are never stored under public web roots or exposed via permanent public URLs.
+  - `LocalStorageProvider` incorporates traversal immunity and time-limited HMAC-SHA256 signature verification.
+  - `S3StorageProvider` provides pre-signed URL generation for S3/Cloudflare R2 deployments.
+- **Zero-Trust Input Validation**:
+  - Format checks (JPEG, PNG, WebP) with Pillow decoding verification.
+  - Bounded dimensions (≤ 4096px) and maximum file size enforcement (≤ 10MB).
+  - SHA-256 asset content hashing for integrity.
+- **Untrusted Text Handling & Catalog Linking**:
+  - Raw OCR output is quarantined and immutable in `ocr_jobs.raw_text`.
+  - Conservative segmentation strips marketing filler, percentages, and bullets.
+  - Candidates are automatically matched against canonical INCI catalog ingredients (`ingredients`, `ingredient_aliases`).
+- **Human Review Workflow**:
+  - Extracted formulations remain provisional candidates until verified or corrected via confirmation endpoint.
+  - All scans and media assets are strictly isolated to the authenticated owning user.
+
+#### OCR Endpoints
+- `POST /api/v1/ocr/scans` — Authenticated upload of label image, validation, OCR execution, and candidate ingredient segmentation. Supports `idempotency_key`.
+- `GET /api/v1/ocr/scans/{scan_id}` — Retrieve scan status, raw text, and candidate ingredients (user-scoped).
+- `POST /api/v1/ocr/scans/{scan_id}/confirm` — Review, edit, and confirm candidate formulation ingredients.
+- `GET /api/v1/ocr/assets/view` — Stream private image asset with valid HMAC signature and expiration timestamp.
 
 ---
 

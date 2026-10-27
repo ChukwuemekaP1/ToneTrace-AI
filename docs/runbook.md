@@ -158,9 +158,52 @@ curl -X POST "http://localhost:8000/api/v1/products/<PRODUCT_UUID>/offers" \
 
 ---
 
-## 5. Automated Testing & Verification
+## 5. OCR & Label Scanning Operations (Phase 5)
 
-Run the full automated test suite (69 tests covering Auth, Profiles, Outbox, Search, and DB):
+### 5.1 Configuring OCR Providers
+Set the provider in `.env`:
+```ini
+# Online OCR (OCR.space Free API)
+OCR_PROVIDER=ocr_space
+OCR_API_KEY=K8503831748457488957
+OCR_BASE_URL=https://api.ocr.space/parse/image
+
+# Storage Configuration
+STORAGE_PROVIDER=local
+STORAGE_LOCAL_DIR=./var/storage
+STORAGE_SIGNING_SECRET=tonetrace-storage-secret-key-change-in-production-12345
+```
+For local testing without internet access, set:
+```ini
+OCR_PROVIDER=mock
+```
+
+### 5.2 Uploading a Product Label for Scanning
+```bash
+curl -X POST http://localhost:8000/api/v1/ocr/scans \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -F "file=@label.jpg;type=image/jpeg" \
+  -F "idempotency_key=unique-upload-123"
+```
+
+### 5.3 Reviewing and Confirming Candidates
+```bash
+curl -X POST http://localhost:8000/api/v1/ocr/scans/<SCAN_ID>/confirm \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ingredients": [
+      {"candidate_id": "<CANDIDATE_UUID>", "position": 1, "name": "Water (Aqua)", "is_confirmed": true},
+      {"candidate_id": null, "position": 2, "name": "Niacinamide", "is_confirmed": true}
+    ]
+  }'
+```
+
+---
+
+## 6. Automated Testing & Verification
+
+Run the full automated test suite (104 tests covering Auth, Profiles, Outbox, Search, Catalogue, and OCR):
 ```bash
 uv run pytest
 ```

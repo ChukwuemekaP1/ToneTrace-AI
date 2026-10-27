@@ -138,6 +138,11 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    media_assets: Mapped[list["MediaAsset"]] = relationship(
+        "MediaAsset",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email}>"
@@ -991,4 +996,228 @@ class SearchOutbox(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         return (
             f"<SearchOutbox id={self.id} entity={self.entity_type}:{self.entity_id} "
             f"action={self.action} status={self.status}>"
+        )
+
+
+class MediaAsset(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Uploaded user image asset stored in private object storage."""
+
+    __tablename__ = "media_assets"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owner user identifier",
+    )
+    storage_provider: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="local",
+        comment="Storage backend: 'local' or 's3'",
+    )
+    storage_key: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+        unique=True,
+        index=True,
+        comment="Private object storage path or S3 key",
+    )
+    original_filename: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Sanitized original upload filename",
+    )
+    content_type: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        comment="MIME type (e.g. image/jpeg, image/png, image/webp)",
+    )
+    file_size_bytes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        comment="File size in bytes",
+    )
+    image_width: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Decoded pixel width",
+    )
+    image_height: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Decoded pixel height",
+    )
+    sha256_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+        comment="SHA-256 digest of image content",
+    )
+
+    __table_args__ = (Index("ix_media_assets_user_created", "user_id", "created_at"),)
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="media_assets")
+    ocr_jobs: Mapped[list["OCRJob"]] = relationship(
+        "OCRJob",
+        back_populates="media_asset",
+        cascade="all, delete-orphan",
+    )
+
+    def __repr__(self) -> str:
+        return f"<MediaAsset id={self.id} user={self.user_id} key={self.storage_key}>"
+
+
+class OCRJob(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """OCR analysis job extracting text from a MediaAsset."""
+
+    __tablename__ = "ocr_jobs"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owner user identifier",
+    )
+    media_asset_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Associated image media asset",
+    )
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="pending",
+        index=True,
+        comment="Job status: pending, processing, succeeded, failed",
+    )
+    provider: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="OCR engine: ocr_space, tesseract, mock",
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="Deduplication key to avoid repeating identical scan jobs",
+    )
+    raw_text: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Raw untrusted OCR text extracted from image",
+    )
+    confidence_score: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="Normalized provider confidence score (0.0 to 1.0)",
+    )
+    processing_time_ms: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Execution duration in milliseconds",
+    )
+    retry_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        comment="Attempt count",
+    )
+    max_retries: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=3,
+        comment="Maximum retry limit",
+    )
+    error_category: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Error classification: rate_limited, timeout, unreadable_image, upstream_error",
+    )
+    error_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Sanitized diagnostic failure description",
+    )
+
+    __table_args__ = (Index("ix_ocr_jobs_user_status", "user_id", "status"),)
+
+    # Relationships
+    user: Mapped["User"] = relationship("User")
+    media_asset: Mapped["MediaAsset"] = relationship("MediaAsset", back_populates="ocr_jobs")
+    candidate_ingredients: Mapped[list["OCRCandidateIngredient"]] = relationship(
+        "OCRCandidateIngredient",
+        back_populates="ocr_job",
+        cascade="all, delete-orphan",
+        order_by="OCRCandidateIngredient.position",
+    )
+
+    def __repr__(self) -> str:
+        return f"<OCRJob id={self.id} status={self.status} provider={self.provider}>"
+
+
+class OCRCandidateIngredient(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Candidate ingredient extracted from OCR raw text and matched against catalog."""
+
+    __tablename__ = "ocr_candidate_ingredients"
+
+    ocr_job_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("ocr_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Parent OCR scan job",
+    )
+    position: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        comment="1-based sequence order in packaging declaration",
+    )
+    raw_text: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        comment="Segmented raw string before normalization",
+    )
+    normalized_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+        comment="Normalized candidate name",
+    )
+    matched_ingredient_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ingredients.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Matched canonical Ingredient if verified against catalog",
+    )
+    confidence: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="Segment-level recognition confidence",
+    )
+    is_user_corrected: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="True if modified by user in confirmation review",
+    )
+    is_confirmed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="True if approved by user as valid packaging ingredient",
+    )
+
+    __table_args__ = (Index("ix_ocr_candidate_job_pos", "ocr_job_id", "position"),)
+
+    # Relationships
+    ocr_job: Mapped["OCRJob"] = relationship("OCRJob", back_populates="candidate_ingredients")
+    matched_ingredient: Mapped["Ingredient | None"] = relationship("Ingredient")
+
+    def __repr__(self) -> str:
+        return (
+            f"<OCRCandidateIngredient id={self.id} job={self.ocr_job_id} "
+            f"pos={self.position} name={self.normalized_name}>"
         )
