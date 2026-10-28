@@ -9,13 +9,22 @@ from elasticsearch import ApiError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.errors import DependencyError
 from app.db.models import Ingredient, Product, ProductIngredient, SearchOutbox
 from app.providers.search_provider import SearchProvider
 from app.schemas.search import IngredientSearchQuery, ProductSearchQuery
 from app.services.search_outbox_service import SearchOutboxService
 from app.services.search_service import SearchService
+
+
+@pytest.fixture(autouse=True)
+def _enable_elasticsearch_for_search_tests(monkeypatch):
+    """Enable Elasticsearch in settings specifically for search tests."""
+    monkeypatch.setenv("ELASTICSEARCH_ENABLED", "true")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture

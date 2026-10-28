@@ -678,7 +678,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
 
             <p className="text-xxs text-slate-400">
-              Condition: {recentScan.lighting_condition.replace(/_/g, " ")} • {recentScan.camera_angle} angle
+              Condition: {(recentScan.lighting_condition || recentScan.capture_conditions?.lighting_condition || "unknown").replace(/_/g, " ")} • {recentScan.camera_angle || recentScan.capture_conditions?.camera_angle || "frontal"} angle
             </p>
 
             {skinStory?.total_succeeded_scans ? (

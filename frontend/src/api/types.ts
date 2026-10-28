@@ -328,6 +328,23 @@ export interface ReminderPreferenceResponse {
 // Skin Scans & Longitudinal Skin Story
 // =============================================================================
 
+export interface ScanMediaResponse {
+  id: string;
+  skin_scan_id: string;
+  media_asset_id?: string | null;
+  media_role: string;
+  metric_code?: string | null;
+  storage_provider: string;
+  content_type: string;
+  file_size_bytes: number;
+  retention_policy: string;
+  retention_expires_at: string;
+  is_deleted: boolean;
+  deleted_at?: string | null;
+  signed_view_url?: string | null;
+  created_at: string;
+}
+
 export interface SkinObservationResponse {
   id: string;
   skin_scan_id: string;
@@ -338,6 +355,9 @@ export interface SkinObservationResponse {
   unit: string;
   directionality: string;
   provider_name: string;
+  provider_model_version?: string;
+  interpretation_version?: string;
+  facial_zone?: string;
   confidence?: number | null;
   caveat_note: string;
   observed_at: string;
@@ -346,19 +366,84 @@ export interface SkinObservationResponse {
 export interface SkinScanResponse {
   id: string;
   user_id: string;
+  consent_id?: string | null;
+  analysis_job_id?: string | null;
+  provider: string; // "mock" | "youcam"
+  provider_task_id?: string | null;
+  provider_model_version?: string | null;
   status: "pending" | "processing" | "succeeded" | "failed" | string;
-  created_at: string;
-  analyzed_at?: string | null;
-  lighting_condition: string;
-  camera_angle: string;
-  cosmetics_worn: boolean;
-  capture_notes?: string | null;
+  idempotency_key?: string | null;
+  capture_conditions?: {
+    lighting_condition?: string;
+    camera_angle?: string;
+    cosmetics_worn?: boolean;
+    notes?: string | null;
+    [key: string]: unknown;
+  };
+  overall_score?: number | null;
+  skin_type_observation?: string | null;
+  error_category?: string | null;
+  error_message?: string | null;
+  raw_payload_retained?: boolean;
+  media_items?: ScanMediaResponse[];
   observations: SkinObservationResponse[];
+  non_diagnostic_disclaimer?: string;
+  variability_disclosure?: string;
+  created_at: string;
+  completed_at?: string | null;
+  deleted_at?: string | null;
+  // Backward compatibility convenience fields
+  analyzed_at?: string | null;
+  lighting_condition?: string;
+  camera_angle?: string;
+  cosmetics_worn?: boolean;
+  capture_notes?: string | null;
   media_count?: number;
 }
 
 export interface SkinScanListResponse {
   items: SkinScanResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SkinScanDeleteResponse {
+  scan_id: string;
+  status: string;
+  purged_media_count: number;
+  deleted_at: string;
+  message: string;
+}
+
+export interface CreateSkinJournalEntryRequest {
+  skin_scan_id?: string | null;
+  recorded_at?: string | null;
+  perceived_skin_state: string;
+  self_reported_observations?: string[];
+  routine_notes?: string | null;
+  products_used?: string[];
+  environmental_or_lifestyle_factors?: Record<string, unknown>;
+  notes?: string | null;
+}
+
+export interface SkinJournalEntryResponse {
+  id: string;
+  user_id: string;
+  skin_scan_id?: string | null;
+  recorded_at: string;
+  perceived_skin_state: string;
+  self_reported_observations: string[];
+  routine_notes?: string | null;
+  products_used: string[];
+  environmental_or_lifestyle_factors: Record<string, unknown>;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkinJournalListResponse {
+  items: SkinJournalEntryResponse[];
   total: number;
   limit: number;
   offset: number;
@@ -372,6 +457,10 @@ export interface SkinStoryPoint {
   display_value: number;
   unit: string;
   directionality: string;
+  provider_name?: string;
+  provider_model_version?: string;
+  interpretation_version?: string;
+  capture_conditions?: Record<string, unknown>;
   is_comparable_to_baseline: boolean;
   incompatibility_reason?: string | null;
 }
@@ -381,11 +470,15 @@ export interface SkinMetricTimeline {
   metric_label: string;
   unit: string;
   directionality: string;
+  baseline_provider?: string;
+  baseline_model_version?: string;
+  baseline_interpretation_version?: string;
   points: SkinStoryPoint[];
   comparable_point_count: number;
   net_observed_delta?: number | null;
-  observation_classification: string;
+  observation_classification: "visual_metric_increase" | "visual_metric_decrease" | "visual_metric_stable" | "insufficient_comparable_data" | string;
   non_clinical_interpretation: string;
+  compatibility_warnings?: string[];
 }
 
 export interface SkinStoryResponse {
@@ -393,13 +486,7 @@ export interface SkinStoryResponse {
   generated_at: string;
   total_succeeded_scans: number;
   metric_timelines: SkinMetricTimeline[];
-  recent_journal_entries: Array<{
-    id: string;
-    recorded_at: string;
-    perceived_skin_state: string;
-    self_reported_observations: string[];
-    notes?: string | null;
-  }>;
+  recent_journal_entries: SkinJournalEntryResponse[];
   capture_variability_notice: string;
   non_diagnostic_disclaimer: string;
   pigmentation_and_causation_guardrail: string;

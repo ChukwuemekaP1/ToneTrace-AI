@@ -315,6 +315,7 @@ describe("Main Dashboard Integration (/)", () => {
     vi.spyOn(dashboardService, "getRecentScan").mockResolvedValue({
       id: "scan-1",
       user_id: "user-1",
+      provider: "mock",
       status: "succeeded",
       created_at: "2026-10-28T09:00:00Z",
       lighting_condition: "natural_daylight",

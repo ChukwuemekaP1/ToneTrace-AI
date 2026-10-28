@@ -12,10 +12,11 @@ import { DiscoveryPage } from "@/pages/DiscoveryPage";
 import { ProductDetailPage } from "@/pages/ProductDetailPage";
 import { ShelfPage } from "@/pages/ShelfPage";
 import { RoutinesPage } from "@/pages/RoutinesPage";
+import { SkinScanPage } from "@/pages/SkinScanPage";
+import { SkinStoryPage } from "@/pages/SkinStoryPage";
 import { ScanLabelModal } from "@/components/ocr/ScanLabelModal";
 import { DesignSystemShowcase } from "@/pages/DesignSystemShowcase";
 import {
-  SkinTrackPlaceholder,
   AiAskPlaceholder,
 } from "@/pages/Placeholders";
 
@@ -116,8 +117,11 @@ export const AppContent: React.FC = () => {
     if (currentRoute === "/scan") {
       return { title: "OCR Scanner", subtitle: "Formulation Verification" };
     }
-    if (currentRoute === "/skin/track") {
-      return { title: "Skin Story", subtitle: "Visual Check-in & History" };
+    if (currentRoute === "/skin/scan") {
+      return { title: "Facial Skin Scan", subtitle: "Surface Appearance Observations" };
+    }
+    if (currentRoute === "/skin/story" || currentRoute === "/skin/track") {
+      return { title: "Skin Story", subtitle: "Longitudinal Observations & Journal" };
     }
     if (currentRoute === "/ai/ask") {
       return { title: "Grounded AI", subtitle: "Scientific Formulation Q&A" };
@@ -200,9 +204,15 @@ export const AppContent: React.FC = () => {
         </ProtectedRoute>
       )}
 
-      {currentRoute === "/skin/track" && (
+      {currentRoute === "/skin/scan" && (
         <ProtectedRoute onNavigate={navigate}>
-          <SkinTrackPlaceholder onNavigate={navigate} />
+          <SkinScanPage onNavigate={navigate} />
+        </ProtectedRoute>
+      )}
+
+      {(currentRoute === "/skin/story" || currentRoute === "/skin/track") && (
+        <ProtectedRoute onNavigate={navigate}>
+          <SkinStoryPage onNavigate={navigate} />
         </ProtectedRoute>
       )}
 

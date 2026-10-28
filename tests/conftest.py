@@ -14,6 +14,7 @@ os.environ["ENVIRONMENT"] = "test"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite://"
 os.environ["ALLOW_DEV_AUTH_BYPASS"] = "false"
 os.environ["OCR_PROVIDER"] = "mock"
+os.environ["STORAGE_PROVIDER"] = "postgres"
 
 from app.core.config import Settings, get_settings
 from app.core.security import (
