@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Chip } from "@/components/ui/Chip";
 import { ScanLabelModal } from "@/components/ocr/ScanLabelModal";
+import { ProductReactionModal } from "@/components/reactions/ProductReactionModal";
 import {
   shelfService,
   SUPPORTED_SHELF_STATUSES,
@@ -99,6 +100,7 @@ export const ShelfPage: React.FC<ShelfPageProps> = ({ onNavigate, initialItemId 
   const [selectedDetailItem, setSelectedDetailItem] = useState<ShelfItemResponse | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<ShelfItemResponse | null>(null);
+  const [isReactionModalOpen, setIsReactionModalOpen] = useState<boolean>(false);
 
   // Add Product Modal Tabs ("catalog" vs "custom")
   const [addMode, setAddMode] = useState<"catalog" | "custom">("catalog");
@@ -765,8 +767,8 @@ export const ShelfPage: React.FC<ShelfPageProps> = ({ onNavigate, initialItemId 
                   </div>
                 )}
 
-              {/* Action Buttons: Delete */}
-              <div className="pt-2 border-t border-white/8 flex items-center justify-between">
+              {/* Action Buttons: Delete, Log Reaction, View Evidence */}
+              <div className="pt-2 border-t border-white/8 flex items-center justify-between gap-2 flex-wrap">
                 <Button
                   size="sm"
                   variant="ghost"
@@ -777,17 +779,29 @@ export const ShelfPage: React.FC<ShelfPageProps> = ({ onNavigate, initialItemId 
                   <span>Remove from Shelf</span>
                 </Button>
 
-                {selectedDetailItem.product_id && (
+                <div className="flex items-center gap-2">
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => onNavigate(`/products/${selectedDetailItem.product_id}`)}
-                    className="flex items-center gap-1.5"
+                    onClick={() => setIsReactionModalOpen(true)}
+                    className="flex items-center gap-1.5 text-amber-300 hover:text-amber-200 border-amber-500/30"
                   >
-                    <span>View Evidence</span>
-                    <ExternalLink className="w-3 h-3 text-slate-400" />
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Log Reaction</span>
                   </Button>
-                )}
+
+                  {selectedDetailItem.product_id && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => onNavigate(`/products/${selectedDetailItem.product_id}`)}
+                      className="flex items-center gap-1.5"
+                    >
+                      <span>View Evidence</span>
+                      <ExternalLink className="w-3 h-3 text-slate-400" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1280,6 +1294,19 @@ export const ShelfPage: React.FC<ShelfPageProps> = ({ onNavigate, initialItemId 
           fetchShelf();
         }}
       />
+
+      {/* ------------------------------------------------------------------- */}
+      {/* 8. Product Reaction Modal                                           */}
+      {/* ------------------------------------------------------------------- */}
+      {isReactionModalOpen && selectedDetailItem && (
+        <ProductReactionModal
+          isOpen={isReactionModalOpen}
+          onClose={() => setIsReactionModalOpen(false)}
+          initialUserProductId={selectedDetailItem.id}
+          initialProductId={selectedDetailItem.product_id}
+          initialProductName={`${selectedDetailItem.display_brand} ${selectedDetailItem.display_name}`}
+        />
+      )}
     </div>
   );
 };

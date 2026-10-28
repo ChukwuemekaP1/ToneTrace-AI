@@ -14,11 +14,9 @@ import { ShelfPage } from "@/pages/ShelfPage";
 import { RoutinesPage } from "@/pages/RoutinesPage";
 import { SkinScanPage } from "@/pages/SkinScanPage";
 import { SkinStoryPage } from "@/pages/SkinStoryPage";
+import { AskAiPage } from "@/pages/AskAiPage";
 import { ScanLabelModal } from "@/components/ocr/ScanLabelModal";
 import { DesignSystemShowcase } from "@/pages/DesignSystemShowcase";
-import {
-  AiAskPlaceholder,
-} from "@/pages/Placeholders";
 
 export const AppContent: React.FC = () => {
   const [currentRoute, setCurrentRoute] = useState<string>(() => {
@@ -123,7 +121,7 @@ export const AppContent: React.FC = () => {
     if (currentRoute === "/skin/story" || currentRoute === "/skin/track") {
       return { title: "Skin Story", subtitle: "Longitudinal Observations & Journal" };
     }
-    if (currentRoute === "/ai/ask") {
+    if (currentRoute === "/ai/ask" || currentRoute === "/ask-ai") {
       return { title: "Grounded AI", subtitle: "Scientific Formulation Q&A" };
     }
 
@@ -216,9 +214,9 @@ export const AppContent: React.FC = () => {
         </ProtectedRoute>
       )}
 
-      {currentRoute === "/ai/ask" && (
+      {(currentRoute === "/ai/ask" || currentRoute === "/ask-ai") && (
         <ProtectedRoute onNavigate={navigate}>
-          <AiAskPlaceholder onNavigate={navigate} />
+          <AskAiPage onNavigate={navigate} />
         </ProtectedRoute>
       )}
 

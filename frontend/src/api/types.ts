@@ -807,6 +807,175 @@ export interface ShelfFilterParams {
   page_size?: number;
 }
 
+// =============================================================================
+// Phase 7 & 9: Grounded AI Explanations (/ai/explanations & /ask-ai)
+// =============================================================================
+
+export type ExplanationEpistemicCategory =
+  | "identity_reference"
+  | "published_research"
+  | "human_interpretation"
+  | "marketing_claim"
+  | "formulation_observation"
+  | "general_guidance";
+
+export type ExplanationEvidenceStrength =
+  | "strong"
+  | "moderate"
+  | "limited"
+  | "preliminary"
+  | "conflicting"
+  | "insufficient"
+  | "reference_only"
+  | "unknown";
+
+export type GroundingStatusType =
+  | "verified"
+  | "fallback_applied"
+  | "insufficient_evidence"
+  | "safety_escalation";
+
+export interface ExplanationRequest {
+  schema_version?: "1.0";
+  question: string;
+  product_ids?: string[];
+  ingredient_ids?: string[];
+  ocr_job_id?: string | null;
+  search_query?: string | null;
+  include_user_skin_profile?: boolean;
+}
+
+export interface GroundedFindingResponse {
+  statement: string;
+  cited_source_ids: string[];
+  epistemic_category: ExplanationEpistemicCategory;
+  evidence_strength: ExplanationEvidenceStrength;
+}
+
+export interface SourceReferenceItem {
+  source_id: string;
+  entity_type:
+    | "product"
+    | "ingredient"
+    | "ingredient_evidence"
+    | "research_record"
+    | "product_offer"
+    | "ocr_scan";
+  entity_uuid: string;
+  title_or_name: string;
+  source_type: string;
+  external_id?: string | null;
+  source_url?: string | null;
+  citation_label: string;
+  epistemic_category?: string | null;
+  has_full_text: boolean;
+  retrieved_at?: string | null;
+}
+
+export interface UncertaintyDisclosure {
+  missing_concentrations_noted: boolean;
+  abstract_only_research_noted: boolean;
+  conflicting_or_limited_evidence_noted: boolean;
+  untrusted_label_or_ocr_noted: boolean;
+  statements: string[];
+}
+
+export interface SafetyEscalationNotice {
+  is_diagnostic_service: false;
+  requires_professional_care_escalation: boolean;
+  escalation_guidance?: string | null;
+  general_disclaimer: string;
+}
+
+export interface GenerationMetadata {
+  provider: string;
+  model: string;
+  latency_ms: number;
+  fallback_used: boolean;
+  fallback_reason?: string | null;
+  rejected_source_ids: string[];
+  prompt_injection_detected: boolean;
+  retrieved_products_count: number;
+  retrieved_ingredients_count: number;
+  retrieved_evidence_count: number;
+  search_backend_used: string;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  generated_at: string;
+}
+
+export interface ExplanationResponse {
+  schema_version: "1.0";
+  explanation_id: string;
+  grounding_status: GroundingStatusType;
+  summary: string;
+  findings: GroundedFindingResponse[];
+  source_references: SourceReferenceItem[];
+  uncertainty_and_limitations: UncertaintyDisclosure;
+  safety_notice: SafetyEscalationNotice;
+  generation_metadata: GenerationMetadata;
+}
+
+// =============================================================================
+// Product Reactions & Tolerance Logging (Phase 10)
+// =============================================================================
+
+export type ReactionType =
+  | "well_tolerated"
+  | "irritation"
+  | "redness"
+  | "breakout"
+  | "dryness"
+  | "stinging"
+  | "allergic_suspect"
+  | "no_visible_change";
+
+export type ReactionSeverity = "none" | "mild" | "moderate" | "severe";
+
+export interface StandaloneReactionCreateRequest {
+  user_product_id?: string | null;
+  product_id?: string | null;
+  routine_id?: string | null;
+  reaction_type: ReactionType;
+  severity?: ReactionSeverity;
+  symptoms?: string[];
+  is_rapidly_worsening?: boolean;
+  suspected_ingredient_names?: string[];
+  notes?: string | null;
+  observed_at?: string | null;
+}
+
+export interface SafetyAwareReactionResponse {
+  id: string;
+  user_id: string;
+  user_product_id?: string | null;
+  product_id?: string | null;
+  routine_id?: string | null;
+  product_display_name?: string | null;
+  reaction_type: string;
+  severity: string;
+  symptoms: string[];
+  is_rapidly_worsening: boolean;
+  suspected_ingredient_names: string[];
+  notes?: string | null;
+  observed_at: string;
+  created_at: string;
+  epistemic_disclaimer: string;
+  is_causal_proof: boolean;
+  is_medical_diagnosis: boolean;
+  requires_urgent_care_guidance: boolean;
+  urgent_care_guidance?: string | null;
+  ordinary_recommendations_suspended: boolean;
+}
+
+export interface ReactionListResponse {
+  items: SafetyAwareReactionResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+  epistemic_disclaimer: string;
+}
+
 export class ApiError extends Error {
   public readonly code: string;
   public readonly status: number;

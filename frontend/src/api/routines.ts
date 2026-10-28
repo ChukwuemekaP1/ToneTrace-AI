@@ -15,6 +15,7 @@
 
 import { apiClient } from "./client";
 import {
+  ReactionListResponse,
   ReminderPreferenceResponse,
   ReminderPreferenceUpdateRequest,
   ResponseEnvelope,
@@ -25,6 +26,8 @@ import {
   RoutineListResponse,
   RoutineResponse,
   RoutineUpdateRequest,
+  SafetyAwareReactionResponse,
+  StandaloneReactionCreateRequest,
 } from "./types";
 
 export const UUID_REGEX =
@@ -222,6 +225,57 @@ export class RoutineApiService {
       {
         method: "PUT",
         body: payload,
+        signal,
+      }
+    );
+    return envelope.data;
+  }
+
+  /**
+   * Record a user-reported product reaction with safety & urgent-care evaluation.
+   */
+  public async createReaction(
+    payload: StandaloneReactionCreateRequest,
+    signal?: AbortSignal
+  ): Promise<SafetyAwareReactionResponse> {
+    const envelope = await apiClient.request<ResponseEnvelope<SafetyAwareReactionResponse>>(
+      "/me/product-reactions",
+      {
+        method: "POST",
+        body: payload,
+        signal,
+      }
+    );
+    return envelope.data;
+  }
+
+  /**
+   * List user-reported product reactions with pagination and optional filters.
+   */
+  public async listReactions(
+    params: {
+      reaction_type?: string;
+      severity?: string;
+      page?: number;
+      page_size?: number;
+    } = {},
+    signal?: AbortSignal
+  ): Promise<ReactionListResponse> {
+    const queryParams: Record<string, string | number | undefined> = {};
+    if (params.reaction_type && params.reaction_type !== "all") {
+      queryParams.reaction_type = params.reaction_type;
+    }
+    if (params.severity && params.severity !== "all") {
+      queryParams.severity = params.severity;
+    }
+    if (params.page) queryParams.page = params.page;
+    if (params.page_size) queryParams.page_size = params.page_size;
+
+    const envelope = await apiClient.request<ResponseEnvelope<ReactionListResponse>>(
+      "/me/product-reactions",
+      {
+        method: "GET",
+        params: queryParams,
         signal,
       }
     );

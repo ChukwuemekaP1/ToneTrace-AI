@@ -127,6 +127,13 @@ export class ProfileService {
       body
     );
   }
+
+  /**
+   * Permanently delete user account, private storage assets, and all health data.
+   */
+  public async deleteAccount(): Promise<{ status: string; user_id: string; purged_storage_objects: number }> {
+    return apiClient.delete<{ status: string; user_id: string; purged_storage_objects: number }>("/api/v1/me");
+  }
 }
 
 export const profileService = new ProfileService();
