@@ -11,6 +11,7 @@ export interface MobileShellProps {
   headerSubtitle?: string;
   headerAction?: React.ReactNode;
   backendHealthy?: boolean | null;
+  hideNav?: boolean;
 }
 
 export const MobileShell: React.FC<MobileShellProps> = ({
@@ -21,6 +22,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({
   headerSubtitle = "Cosmetic Formulation Science",
   headerAction,
   backendHealthy = null,
+  hideNav = false,
 }) => {
   return (
     <div className="min-h-screen w-full bg-[#040608] flex justify-center items-start antialiased text-slate-100 overflow-x-hidden">
@@ -72,66 +74,68 @@ export const MobileShell: React.FC<MobileShellProps> = ({
         </main>
 
         {/* Bottom Tab Navigation Bar */}
-        <nav
-          data-testid="mobile-bottom-nav"
-          className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-40 bg-[#0C1217]/95 backdrop-blur-xl border-t border-white/[0.08] px-3 py-2 flex items-center justify-around shadow-glass"
-        >
-          <button
-            type="button"
-            onClick={() => onTabChange?.("home")}
-            className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
-              activeTab === "home" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
-            }`}
+        {!hideNav && (
+          <nav
+            data-testid="mobile-bottom-nav"
+            className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-40 bg-[#0C1217]/95 backdrop-blur-xl border-t border-white/[0.08] px-3 py-2 flex items-center justify-around shadow-glass"
           >
-            <Compass className="w-5 h-5" />
-            <span className="text-xxs tracking-tight">Explore</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => onTabChange?.("home")}
+              className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
+                activeTab === "home" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Compass className="w-5 h-5" />
+              <span className="text-xxs tracking-tight">Explore</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onTabChange?.("shelf")}
-            className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
-              activeTab === "shelf" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <BookmarkCheck className="w-5 h-5" />
-            <span className="text-xxs tracking-tight">Shelf</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => onTabChange?.("shelf")}
+              className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
+                activeTab === "shelf" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <BookmarkCheck className="w-5 h-5" />
+              <span className="text-xxs tracking-tight">Shelf</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onTabChange?.("routines")}
-            className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
-              activeTab === "routines" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Calendar className="w-5 h-5" />
-            <span className="text-xxs tracking-tight">Routines</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => onTabChange?.("routines")}
+              className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
+                activeTab === "routines" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Calendar className="w-5 h-5" />
+              <span className="text-xxs tracking-tight">Routines</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onTabChange?.("profile")}
-            className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
-              activeTab === "profile" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <User className="w-5 h-5" />
-            <span className="text-xxs tracking-tight">Profile</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => onTabChange?.("profile")}
+              className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
+                activeTab === "profile" ? "text-emerald-400 font-semibold" : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <User className="w-5 h-5" />
+              <span className="text-xxs tracking-tight">Profile</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onTabChange?.("showcase")}
-            className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
-              activeTab === "showcase" ? "text-champagne font-semibold" : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="Design System Showcase"
-          >
-            <Code2 className="w-5 h-5" />
-            <span className="text-xxs tracking-tight">Showcase</span>
-          </button>
-        </nav>
+            <button
+              type="button"
+              onClick={() => onTabChange?.("showcase")}
+              className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
+                activeTab === "showcase" ? "text-champagne font-semibold" : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Design System Showcase"
+            >
+              <Code2 className="w-5 h-5" />
+              <span className="text-xxs tracking-tight">Showcase</span>
+            </button>
+          </nav>
+        )}
       </div>
     </div>
   );

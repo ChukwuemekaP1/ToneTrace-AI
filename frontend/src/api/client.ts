@@ -2,10 +2,12 @@
  * ToneTrace API Client
  *
  * Implements strict envelope unwrapping, correlation ID headers,
- * authentication token injection, and typed error normalization.
+ * authentication token injection, typed error normalization, and
+ * safe 401 token refresh queue with loop prevention.
  */
 
 import { env } from "@/config/env";
+import { tokenStore } from "./token-store";
 import { ApiError, ErrorResponse, ResponseEnvelope } from "./types";
 
 export interface RequestOptions extends Omit<RequestInit, "body"> {
@@ -13,18 +15,36 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
   token?: string | null;
   skipEnvelopeUnwrap?: boolean;
+  _retry?: boolean;
 }
 
 class ApiClient {
   private baseUrl: string;
   private tokenGetter: (() => string | null) | null = null;
+  private refreshHandler: (() => Promise<string | null>) | null = null;
+  private isRefreshing = false;
+  private refreshSubscribers: Array<(token: string | null) => void> = [];
 
   constructor(baseUrl: string = env.apiBaseUrl) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.tokenGetter = () => tokenStore.getAccessToken();
   }
 
   public setTokenGetter(getter: () => string | null): void {
     this.tokenGetter = getter;
+  }
+
+  public setRefreshHandler(handler: () => Promise<string | null>): void {
+    this.refreshHandler = handler;
+  }
+
+  private onRefreshed(token: string | null): void {
+    this.refreshSubscribers.forEach((cb) => cb(token));
+    this.refreshSubscribers = [];
+  }
+
+  private addRefreshSubscriber(cb: (token: string | null) => void): void {
+    this.refreshSubscribers.push(cb);
   }
 
   private generateRequestId(): string {
@@ -61,6 +81,7 @@ class ApiClient {
       token,
       headers: customHeaders = {},
       skipEnvelopeUnwrap = false,
+      _retry = false,
       ...fetchOptions
     } = options;
 
@@ -135,6 +156,65 @@ class ApiClient {
         }
       }
 
+      // Check if this is an expired session that can be recovered via refresh rotation
+      const isAuthRoute = path.includes("/auth/");
+      if (response.status === 401 && !_retry && !isAuthRoute && this.refreshHandler) {
+        if (this.isRefreshing) {
+          // Concurrency queue: wait for active refresh operation
+          return new Promise<T>((resolve, reject) => {
+            this.addRefreshSubscriber(async (newToken) => {
+              if (!newToken) {
+                reject(
+                  new ApiError(
+                    errorMessage,
+                    response.status,
+                    errorCode,
+                    errorRequestId,
+                    errorDetails
+                  )
+                );
+                return;
+              }
+              try {
+                const res = await this.request<T>(path, {
+                  ...options,
+                  _retry: true,
+                  token: newToken,
+                });
+                resolve(res);
+              } catch (retryErr) {
+                reject(retryErr);
+              }
+            });
+          });
+        }
+
+        // Initiate refresh rotation
+        this.isRefreshing = true;
+        try {
+          const newToken = await this.refreshHandler();
+          this.onRefreshed(newToken);
+          if (newToken) {
+            return await this.request<T>(path, {
+              ...options,
+              _retry: true,
+              token: newToken,
+            });
+          }
+        } catch (refreshErr) {
+          this.onRefreshed(null);
+          throw new ApiError(
+            errorMessage,
+            response.status,
+            errorCode,
+            errorRequestId,
+            errorDetails
+          );
+        } finally {
+          this.isRefreshing = false;
+        }
+      }
+
       throw new ApiError(
         errorMessage,
         response.status,
@@ -181,7 +261,6 @@ class ApiClient {
   // Diagnostic / Health Probes (Verified contract: GET /api/v1/health/live and /health/live)
   public async checkHealth(): Promise<{ live: boolean; details?: unknown }> {
     try {
-      // Prioritize /api/v1/health/live to guarantee routing through the /api proxy
       const res = await this.get<{ status: string }>("/api/v1/health/live", {
         skipEnvelopeUnwrap: true,
       });
