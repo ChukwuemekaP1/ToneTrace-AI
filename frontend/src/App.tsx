@@ -8,6 +8,8 @@ import { OnboardingPage } from "@/pages/auth/OnboardingPage";
 import { SkinProfileEditorPage } from "@/pages/SkinProfileEditorPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { DashboardPage } from "@/pages/DashboardPage";
+import { DiscoveryPage } from "@/pages/DiscoveryPage";
+import { ProductDetailPage } from "@/pages/ProductDetailPage";
 import { DesignSystemShowcase } from "@/pages/DesignSystemShowcase";
 import {
   ShelfPlaceholder,
@@ -15,7 +17,6 @@ import {
   ScanPlaceholder,
   SkinTrackPlaceholder,
   AiAskPlaceholder,
-  ExplorePlaceholder,
 } from "@/pages/Placeholders";
 
 export const AppContent: React.FC = () => {
@@ -41,6 +42,14 @@ export const AppContent: React.FC = () => {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  const isProductDetailRoute =
+    currentRoute.startsWith("/products/") || currentRoute.startsWith("/discovery/products/");
+  const productId = isProductDetailRoute
+    ? currentRoute.replace(/^\/(?:discovery\/)?products\//, "").split("?")[0]
+    : "";
+
+  const isDiscoveryRoute = currentRoute === "/discovery" || currentRoute === "/explore";
 
   // Determine active tab from route
   const activeTab: NavTab = (() => {
@@ -93,6 +102,12 @@ export const AppContent: React.FC = () => {
     if (isSettingsRoute) {
       return { title: "Skin Profile", subtitle: "Formulation Preferences" };
     }
+    if (isProductDetailRoute) {
+      return { title: "Product Detail", subtitle: "Formulation & Scientific Evidence" };
+    }
+    if (isDiscoveryRoute) {
+      return { title: "Product Discovery", subtitle: "Cosmetic Formulation Catalogue" };
+    }
     if (currentRoute === "/scan") {
       return { title: "OCR Scanner", subtitle: "Formulation Verification" };
     }
@@ -101,9 +116,6 @@ export const AppContent: React.FC = () => {
     }
     if (currentRoute === "/ai/ask") {
       return { title: "Grounded AI", subtitle: "Scientific Formulation Q&A" };
-    }
-    if (currentRoute === "/explore") {
-      return { title: "Discovery", subtitle: "Cosmetic Formulation Catalogue" };
     }
 
     switch (activeTab) {
@@ -157,6 +169,20 @@ export const AppContent: React.FC = () => {
         </ProtectedRoute>
       )}
 
+      {/* Product Discovery Route */}
+      {isDiscoveryRoute && (
+        <ProtectedRoute onNavigate={navigate}>
+          <DiscoveryPage onNavigate={navigate} />
+        </ProtectedRoute>
+      )}
+
+      {/* Product Detail Route */}
+      {isProductDetailRoute && (
+        <ProtectedRoute onNavigate={navigate}>
+          <ProductDetailPage productId={productId} onNavigate={navigate} />
+        </ProtectedRoute>
+      )}
+
       {/* Quick Action Routes */}
       {currentRoute === "/scan" && (
         <ProtectedRoute onNavigate={navigate}>
@@ -173,12 +199,6 @@ export const AppContent: React.FC = () => {
       {currentRoute === "/ai/ask" && (
         <ProtectedRoute onNavigate={navigate}>
           <AiAskPlaceholder onNavigate={navigate} />
-        </ProtectedRoute>
-      )}
-
-      {currentRoute === "/explore" && (
-        <ProtectedRoute onNavigate={navigate}>
-          <ExplorePlaceholder onNavigate={navigate} />
         </ProtectedRoute>
       )}
 

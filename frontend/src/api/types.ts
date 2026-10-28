@@ -358,6 +358,114 @@ export interface DiscoveryProductListResponse {
   total_pages: number;
   search_backend_used: string;
   rule_engine_version: string;
+  degraded_search_warning?: string | null;
+}
+
+export interface DiscoveryIngredientDetail {
+  ingredient_id: string;
+  source_id: string;
+  inci_name: string;
+  common_name?: string | null;
+  position: number;
+  function?: string | null;
+  concentration_percentage?: number | null;
+  concentration_status: "verified_percentage" | "unknown_order_only" | string;
+  is_user_sensitivity_match: boolean;
+  evidence_count: number;
+  evidence_summaries: string[];
+  evidence_source_ids: string[];
+}
+
+export interface DiscoveryOfferSummary {
+  offer_id: string;
+  merchant_name: string;
+  price_minor_units: number;
+  currency: string;
+  is_in_stock: boolean;
+  offer_url?: string | null;
+  retrieved_at: string;
+  commercial_segregation_label?: string;
+}
+
+export interface DiscoveryProductDetailResponse {
+  product_id: string;
+  source_id: string;
+  name: string;
+  brand: string;
+  category: string;
+  description?: string | null;
+  ean_or_upc?: string | null;
+  image_url?: string | null;
+  formula_version?: string | null;
+  full_ingredient_list?: string | null;
+  ingredient_data_status: "complete" | "partial_text_only" | "missing" | string;
+  ingredients: DiscoveryIngredientDetail[];
+  commercial_offers: DiscoveryOfferSummary[];
+  on_user_shelf: boolean;
+  user_shelf_item_id?: string | null;
+  user_shelf_status?: string | null;
+  recommendation: RecommendationAssessment;
+  grounded_ai_explanation?: unknown | null;
+}
+
+export interface ResearchRecordItem {
+  id: string;
+  source_type: string;
+  external_id: string;
+  title: string;
+  authors: string[];
+  journal_or_authority?: string | null;
+  publication_year?: number | null;
+  study_type?: string | null;
+  abstract_text?: string | null;
+  has_full_text: boolean;
+  source_url: string;
+  license_or_attribution: string;
+}
+
+export interface EvidenceSourceLinkItem {
+  id: string;
+  research_record_id: string;
+  is_exact_match: boolean;
+  research_record: ResearchRecordItem;
+}
+
+export interface IngredientEvidenceItemResponse {
+  id: string;
+  ingredient_id: string;
+  evidence_category: string;
+  topic_or_target: string;
+  evidence_direction: string;
+  evidence_strength: string;
+  study_type?: string | null;
+  summary_statement: string;
+  limitations_and_caveats: string;
+  review_status: string;
+  retrieved_at: string;
+  source_links: EvidenceSourceLinkItem[];
+}
+
+export interface IngredientEvidenceListResponse {
+  items: IngredientEvidenceItemResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+  guardrails?: {
+    efficacy_disclaimer?: string;
+    concentration_disclaimer?: string;
+  };
+}
+
+export interface DiscoveryFilterParams {
+  q?: string;
+  category?: string;
+  brand?: string;
+  goal?: string;
+  exclude_user_sensitivities?: boolean;
+  require_complete_ingredients?: boolean;
+  sort_by?: "suitability_desc" | "relevance" | "name_asc" | "name_desc" | "updated_at_desc";
+  page?: number;
+  page_size?: number;
 }
 
 export class ApiError extends Error {
