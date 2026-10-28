@@ -209,14 +209,98 @@ export interface RoutineListResponse {
   page_size: number;
 }
 
+export interface CompletedStepSnapshot {
+  step_order: number;
+  step_label: string;
+  user_product_id?: string | null;
+  product_id?: string | null;
+  custom_instruction?: string | null;
+  status: "completed" | "skipped" | string;
+  notes?: string | null;
+}
+
 export interface RoutineCompletionResponse {
   id: string;
-  routine_id: string;
   user_id: string;
+  routine_id?: string | null;
+  routine_name_snapshot: string;
+  routine_version_snapshot: number;
+  time_of_day_snapshot: string;
+  status: "completed" | "partial" | "skipped" | string;
   completed_at: string;
-  status: string;
-  timezone: string;
-  step_snapshots?: unknown[];
+  user_timezone: string;
+  local_date: string;
+  local_time: string;
+  completed_steps_snapshot: CompletedStepSnapshot[];
+  notes?: string | null;
+  idempotency_key?: string | null;
+  created_at: string;
+}
+
+export interface RoutineCompletionListResponse {
+  items: RoutineCompletionResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface RoutineStepInput {
+  step_order: number;
+  time_of_day?: "morning" | "evening" | "midday" | "any" | null;
+  user_product_id?: string | null;
+  product_id?: string | null;
+  step_label?: string | null;
+  custom_instruction?: string | null;
+  frequency?: "every_session" | "daily" | "alternate_days" | "twice_weekly" | "weekly" | "as_needed";
+  wait_time_seconds?: number | null;
+  is_active?: boolean;
+}
+
+export interface RoutineCreateRequest {
+  name: string;
+  description?: string | null;
+  time_of_day?: "morning" | "evening" | "midday" | "weekly" | "custom";
+  frequency?: "daily" | "every_other_day" | "weekly" | "custom_days";
+  days_of_week?: number[];
+  preferred_local_time?: string | null;
+  is_active?: boolean;
+  steps?: RoutineStepInput[];
+}
+
+export interface RoutineUpdateRequest {
+  name?: string | null;
+  description?: string | null;
+  time_of_day?: "morning" | "evening" | "midday" | "weekly" | "custom" | null;
+  frequency?: "daily" | "every_other_day" | "weekly" | "custom_days" | null;
+  days_of_week?: number[] | null;
+  preferred_local_time?: string | null;
+  is_active?: boolean | null;
+  steps?: RoutineStepInput[] | null;
+}
+
+export interface RoutineCompletionCreateRequest {
+  status?: "completed" | "partial" | "skipped";
+  completed_at?: string | null;
+  step_results?: Array<{
+    step_order: number;
+    status: "completed" | "skipped";
+    notes?: string | null;
+  }> | null;
+  notes?: string | null;
+  idempotency_key?: string | null;
+}
+
+export interface ReminderPreferenceUpdateRequest {
+  reminders_enabled?: boolean;
+  preferred_channels?: Array<"in_app" | "email" | "push">;
+  morning_reminder_enabled?: boolean;
+  morning_reminder_time?: string;
+  evening_reminder_enabled?: boolean;
+  evening_reminder_time?: string;
+  quiet_hours_enabled?: boolean;
+  quiet_hours_start?: string;
+  quiet_hours_end?: string;
+  timezone_override?: string | null;
 }
 
 export interface ReminderPreferenceResponse {

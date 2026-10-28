@@ -483,9 +483,16 @@ describe("Main Dashboard Integration (/)", () => {
       id: "comp-1",
       routine_id: routineId,
       user_id: "user-1",
+      routine_name_snapshot: "Morning Routine",
+      routine_version_snapshot: 1,
+      time_of_day_snapshot: "morning",
       completed_at: "2026-10-28T09:15:00Z",
       status: "completed",
-      timezone: "America/New_York",
+      user_timezone: "America/New_York",
+      local_date: "2026-10-28",
+      local_time: "09:15",
+      completed_steps_snapshot: [],
+      created_at: "2026-10-28T09:15:00Z",
     });
 
     render(

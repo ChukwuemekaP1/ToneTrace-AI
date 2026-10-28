@@ -11,10 +11,10 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { DiscoveryPage } from "@/pages/DiscoveryPage";
 import { ProductDetailPage } from "@/pages/ProductDetailPage";
 import { ShelfPage } from "@/pages/ShelfPage";
+import { RoutinesPage } from "@/pages/RoutinesPage";
 import { ScanLabelModal } from "@/components/ocr/ScanLabelModal";
 import { DesignSystemShowcase } from "@/pages/DesignSystemShowcase";
 import {
-  RoutinesPlaceholder,
   SkinTrackPlaceholder,
   AiAskPlaceholder,
 } from "@/pages/Placeholders";
@@ -220,7 +220,7 @@ export const AppContent: React.FC = () => {
 
       {currentRoute === "/routines" && (
         <ProtectedRoute onNavigate={navigate}>
-          <RoutinesPlaceholder onNavigate={navigate} />
+          <RoutinesPage onNavigate={navigate} />
         </ProtectedRoute>
       )}
 
