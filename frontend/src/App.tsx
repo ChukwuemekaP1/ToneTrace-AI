@@ -10,11 +10,11 @@ import { ProfilePage } from "@/pages/ProfilePage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { DiscoveryPage } from "@/pages/DiscoveryPage";
 import { ProductDetailPage } from "@/pages/ProductDetailPage";
+import { ShelfPage } from "@/pages/ShelfPage";
+import { ScanLabelModal } from "@/components/ocr/ScanLabelModal";
 import { DesignSystemShowcase } from "@/pages/DesignSystemShowcase";
 import {
-  ShelfPlaceholder,
   RoutinesPlaceholder,
-  ScanPlaceholder,
   SkinTrackPlaceholder,
   AiAskPlaceholder,
 } from "@/pages/Placeholders";
@@ -49,11 +49,16 @@ export const AppContent: React.FC = () => {
     ? currentRoute.replace(/^\/(?:discovery\/)?products\//, "").split("?")[0]
     : "";
 
+  const isShelfDetailRoute = currentRoute.startsWith("/shelf/") && currentRoute !== "/shelf";
+  const shelfItemId = isShelfDetailRoute
+    ? currentRoute.replace(/^\/shelf\//, "").split("?")[0]
+    : null;
+
   const isDiscoveryRoute = currentRoute === "/discovery" || currentRoute === "/explore";
 
   // Determine active tab from route
   const activeTab: NavTab = (() => {
-    if (currentRoute === "/shelf") return "shelf";
+    if (currentRoute === "/shelf" || currentRoute.startsWith("/shelf/")) return "shelf";
     if (currentRoute === "/routines") return "routines";
     if (currentRoute === "/profile" || currentRoute === "/settings/skin-profile") return "profile";
     if (currentRoute === "/showcase") return "showcase";
@@ -186,7 +191,12 @@ export const AppContent: React.FC = () => {
       {/* Quick Action Routes */}
       {currentRoute === "/scan" && (
         <ProtectedRoute onNavigate={navigate}>
-          <ScanPlaceholder onNavigate={navigate} />
+          <div className="space-y-4 text-left">
+            <ScanLabelModal
+              isOpen={true}
+              onClose={() => navigate("/")}
+            />
+          </div>
         </ProtectedRoute>
       )}
 
@@ -202,9 +212,9 @@ export const AppContent: React.FC = () => {
         </ProtectedRoute>
       )}
 
-      {currentRoute === "/shelf" && (
+      {(currentRoute === "/shelf" || isShelfDetailRoute) && (
         <ProtectedRoute onNavigate={navigate}>
-          <ShelfPlaceholder onNavigate={navigate} />
+          <ShelfPage onNavigate={navigate} initialItemId={shelfItemId} />
         </ProtectedRoute>
       )}
 

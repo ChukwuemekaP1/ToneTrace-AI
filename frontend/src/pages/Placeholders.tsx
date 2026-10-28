@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   BookmarkCheck,
   Calendar,
@@ -10,26 +10,45 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Chip } from "@/components/ui/Chip";
+import { Button } from "@/components/ui/Button";
+import { ScanLabelModal } from "@/components/ocr/ScanLabelModal";
 
 interface PlaceholderProps {
   onNavigate?: (route: string) => void;
 }
 
-export const ShelfPlaceholder: React.FC<PlaceholderProps> = ({ onNavigate }) => (
-  <div className="space-y-4 text-left">
-    <div className="flex items-center justify-between">
-      <h2 className="text-base font-bold text-white tracking-tight">My Shelf</h2>
-      <Chip variant="verified" size="sm">Phase 4 Scope</Chip>
+export const ShelfPlaceholder: React.FC<PlaceholderProps> = ({ onNavigate }) => {
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+
+  return (
+    <div className="space-y-4 text-left">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-bold text-white tracking-tight">My Shelf</h2>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setIsScanModalOpen(true)}
+          className="flex items-center gap-1.5"
+        >
+          <Camera className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Scan a Label</span>
+        </Button>
+      </div>
+      <EmptyState
+        icon={<BookmarkCheck className="w-6 h-6 text-emerald-400" />}
+        title="Personal Shelf & Catalog Discovery"
+        description="Endpoints verified: GET/POST /api/v1/me/shelf and GET /api/v1/discovery/products. Add products by scanning physical labels or searching the verified catalog."
+        actionLabel="Back to Home"
+        onAction={onNavigate ? () => onNavigate("/") : undefined}
+      />
+
+      <ScanLabelModal
+        isOpen={isScanModalOpen}
+        onClose={() => setIsScanModalOpen(false)}
+      />
     </div>
-    <EmptyState
-      icon={<BookmarkCheck className="w-6 h-6 text-emerald-400" />}
-      title="Personal Shelf & Catalog Discovery"
-      description="Endpoints verified: GET/POST /api/v1/me/shelf and GET /api/v1/discovery/products. Shelf inventory management begins in Phase 4."
-      actionLabel="Back to Home"
-      onAction={onNavigate ? () => onNavigate("/") : undefined}
-    />
-  </div>
-);
+  );
+};
 
 export const RoutinesPlaceholder: React.FC<PlaceholderProps> = ({ onNavigate }) => (
   <div className="space-y-4 text-left">

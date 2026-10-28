@@ -468,6 +468,174 @@ export interface DiscoveryFilterParams {
   page_size?: number;
 }
 
+// -----------------------------------------------------------------------------
+// Phase 5: OCR & Label Scanning Types
+// -----------------------------------------------------------------------------
+
+export interface MediaAssetResponse {
+  id: string;
+  storage_provider: string;
+  original_filename?: string | null;
+  content_type: string;
+  file_size_bytes: number;
+  image_width?: number | null;
+  image_height?: number | null;
+  sha256_hash: string;
+  retention_policy: string;
+  retention_expires_at?: string | null;
+  is_deleted: boolean;
+  deleted_at?: string | null;
+  view_url?: string | null;
+  created_at: string;
+}
+
+export interface MediaAssetDeleteResponse {
+  asset_id: string;
+  status: string;
+  deleted_at: string;
+  message: string;
+}
+
+export interface OCRCandidateIngredient {
+  id: string;
+  position: number;
+  raw_text: string;
+  normalized_name: string;
+  matched_ingredient_id?: string | null;
+  confidence?: number | null;
+  is_user_corrected: boolean;
+  is_confirmed: boolean;
+}
+
+export interface OCRScanResponse {
+  id: string;
+  status: "processing" | "succeeded" | "failed" | string;
+  provider: string;
+  raw_text?: string | null;
+  confidence_score?: number | null;
+  processing_time_ms?: number | null;
+  error_category?: string | null;
+  error_message?: string | null;
+  media_asset: MediaAssetResponse;
+  candidates: OCRCandidateIngredient[];
+  candidate_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConfirmIngredientItem {
+  candidate_id?: string | null;
+  position: number;
+  name: string;
+  is_confirmed: boolean;
+}
+
+export interface ConfirmScanRequest {
+  ingredients: ConfirmIngredientItem[];
+}
+
+export interface ConfirmScanResponse {
+  scan_id: string;
+  status: string;
+  confirmed_count: number;
+  candidates: OCRCandidateIngredient[];
+  message: string;
+}
+
+export type ShelfStatus =
+  | "in_use"
+  | "wishlist"
+  | "finished"
+  | "paused"
+  | "discontinued"
+  | "avoided";
+
+export interface ShelfItemCreateRequest {
+  product_id?: string | null;
+  variant_id?: string | null;
+  ocr_job_id?: string | null;
+  custom_name?: string | null;
+  custom_brand?: string | null;
+  custom_category?: string | null;
+  custom_ingredient_text?: string | null;
+  status?: ShelfStatus;
+  opened_at?: string | null;
+  expires_at?: string | null;
+  purchase_price_minor_units?: number | null;
+  purchase_currency?: string | null;
+  private_notes?: string | null;
+}
+
+export interface ShelfItemUpdateRequest {
+  status?: ShelfStatus | null;
+  opened_at?: string | null;
+  expires_at?: string | null;
+  purchase_price_minor_units?: number | null;
+  purchase_currency?: string | null;
+  private_notes?: string | null;
+  custom_name?: string | null;
+  custom_brand?: string | null;
+  custom_category?: string | null;
+  custom_ingredient_text?: string | null;
+}
+
+export interface ShelfItemReaction {
+  id: string;
+  reaction_type: string;
+  severity: string;
+  suspected_ingredient_names: string[];
+  notes?: string | null;
+  observed_at: string;
+  created_at: string;
+}
+
+export interface ShelfItemResponse {
+  id: string;
+  user_id: string;
+  product_id?: string | null;
+  variant_id?: string | null;
+  ocr_job_id?: string | null;
+  is_custom: boolean;
+  custom_name?: string | null;
+  custom_brand?: string | null;
+  custom_category?: string | null;
+  display_name: string;
+  display_brand: string;
+  display_category: string;
+  catalogue_status: "catalogue_linked" | "custom_entry" | "catalogue_unavailable";
+  ingredient_data_status: "complete" | "partial_text_only" | "missing";
+  ingredient_names: string[];
+  sensitivity_alerts: string[];
+  incomplete_ingredient_warning?: string | null;
+  status: ShelfStatus | string;
+  opened_at?: string | null;
+  expires_at?: string | null;
+  purchase_price_minor_units?: number | null;
+  purchase_currency?: string | null;
+  private_notes?: string | null;
+  is_public: boolean;
+  reactions?: ShelfItemReaction[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShelfListResponse {
+  items: ShelfItemResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface ShelfFilterParams {
+  status?: ShelfStatus;
+  category?: string;
+  is_custom?: boolean;
+  sort_by?: "created_at_desc" | "name_asc" | "opened_at_desc";
+  page?: number;
+  page_size?: number;
+}
+
 export class ApiError extends Error {
   public readonly code: string;
   public readonly status: number;

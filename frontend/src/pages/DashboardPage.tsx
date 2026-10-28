@@ -31,6 +31,7 @@ import {
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Chip } from "@/components/ui/Chip";
 import { Button } from "@/components/ui/Button";
+import { ScanLabelModal } from "@/components/ocr/ScanLabelModal";
 
 export interface DashboardPageProps {
   onNavigate: (route: string) => void;
@@ -42,6 +43,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigateTab,
 }) => {
   const { user, summary } = useAuth();
+  const [isScanModalOpen, setIsScanModalOpen] = useState<boolean>(false);
 
   // ---------------------------------------------------------------------------
   // Card 1: Health & Journey Summary State
@@ -362,7 +364,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <div className="grid grid-cols-2 gap-2.5">
           <button
             type="button"
-            onClick={() => onNavigate("/scan")}
+            onClick={() => {
+              setIsScanModalOpen(true);
+              onNavigate("/scan");
+            }}
+            aria-label="Scan a Label"
             className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-950/60 to-emerald-900/30 border border-emerald-500/40 shadow-glow text-left hover:border-emerald-400 transition-all group flex flex-col justify-between"
           >
             <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 mb-2 group-hover:scale-105 transition-transform">
@@ -790,6 +796,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
         )}
       </GlassCard>
+
+      {/* Accessible OCR Label Scanning Modal / Bottom Sheet */}
+      <ScanLabelModal
+        isOpen={isScanModalOpen}
+        onClose={() => setIsScanModalOpen(false)}
+      />
     </div>
   );
 };
