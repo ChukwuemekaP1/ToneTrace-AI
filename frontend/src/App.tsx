@@ -7,9 +7,16 @@ import { RegisterPage } from "@/pages/auth/RegisterPage";
 import { OnboardingPage } from "@/pages/auth/OnboardingPage";
 import { SkinProfileEditorPage } from "@/pages/SkinProfileEditorPage";
 import { ProfilePage } from "@/pages/ProfilePage";
-import { AppHome } from "@/pages/AppHome";
+import { DashboardPage } from "@/pages/DashboardPage";
 import { DesignSystemShowcase } from "@/pages/DesignSystemShowcase";
-import { ShelfPlaceholder, RoutinesPlaceholder } from "@/pages/Placeholders";
+import {
+  ShelfPlaceholder,
+  RoutinesPlaceholder,
+  ScanPlaceholder,
+  SkinTrackPlaceholder,
+  AiAskPlaceholder,
+  ExplorePlaceholder,
+} from "@/pages/Placeholders";
 
 export const AppContent: React.FC = () => {
   const [currentRoute, setCurrentRoute] = useState<string>(() => {
@@ -18,7 +25,7 @@ export const AppContent: React.FC = () => {
     }
     return "/";
   });
-  const [backendHealthy, setBackendHealthy] = useState<boolean | null>(null);
+  const [backendHealthy] = useState<boolean | null>(true);
 
   const navigate = useCallback((route: string) => {
     setCurrentRoute(route);
@@ -41,6 +48,7 @@ export const AppContent: React.FC = () => {
     if (currentRoute === "/routines") return "routines";
     if (currentRoute === "/profile" || currentRoute === "/settings/skin-profile") return "profile";
     if (currentRoute === "/showcase") return "showcase";
+    if (currentRoute === "/scan") return "scan";
     return "home";
   })();
 
@@ -57,6 +65,9 @@ export const AppContent: React.FC = () => {
         break;
       case "showcase":
         navigate("/showcase");
+        break;
+      case "scan":
+        navigate("/scan");
         break;
       case "home":
       default:
@@ -81,6 +92,18 @@ export const AppContent: React.FC = () => {
     }
     if (isSettingsRoute) {
       return { title: "Skin Profile", subtitle: "Formulation Preferences" };
+    }
+    if (currentRoute === "/scan") {
+      return { title: "OCR Scanner", subtitle: "Formulation Verification" };
+    }
+    if (currentRoute === "/skin/track") {
+      return { title: "Skin Story", subtitle: "Visual Check-in & History" };
+    }
+    if (currentRoute === "/ai/ask") {
+      return { title: "Grounded AI", subtitle: "Scientific Formulation Q&A" };
+    }
+    if (currentRoute === "/explore") {
+      return { title: "Discovery", subtitle: "Cosmetic Formulation Catalogue" };
     }
 
     switch (activeTab) {
@@ -127,25 +150,47 @@ export const AppContent: React.FC = () => {
         </ProtectedRoute>
       )}
 
-      {/* Core Protected Routes */}
+      {/* Core Dashboard Protected Route */}
       {currentRoute === "/" && (
         <ProtectedRoute onNavigate={navigate}>
-          <AppHome
-            onNavigateTab={handleTabChange}
-            onHealthChange={setBackendHealthy}
-          />
+          <DashboardPage onNavigate={navigate} onNavigateTab={handleTabChange} />
+        </ProtectedRoute>
+      )}
+
+      {/* Quick Action Routes */}
+      {currentRoute === "/scan" && (
+        <ProtectedRoute onNavigate={navigate}>
+          <ScanPlaceholder onNavigate={navigate} />
+        </ProtectedRoute>
+      )}
+
+      {currentRoute === "/skin/track" && (
+        <ProtectedRoute onNavigate={navigate}>
+          <SkinTrackPlaceholder onNavigate={navigate} />
+        </ProtectedRoute>
+      )}
+
+      {currentRoute === "/ai/ask" && (
+        <ProtectedRoute onNavigate={navigate}>
+          <AiAskPlaceholder onNavigate={navigate} />
+        </ProtectedRoute>
+      )}
+
+      {currentRoute === "/explore" && (
+        <ProtectedRoute onNavigate={navigate}>
+          <ExplorePlaceholder onNavigate={navigate} />
         </ProtectedRoute>
       )}
 
       {currentRoute === "/shelf" && (
         <ProtectedRoute onNavigate={navigate}>
-          <ShelfPlaceholder />
+          <ShelfPlaceholder onNavigate={navigate} />
         </ProtectedRoute>
       )}
 
       {currentRoute === "/routines" && (
         <ProtectedRoute onNavigate={navigate}>
-          <RoutinesPlaceholder />
+          <RoutinesPlaceholder onNavigate={navigate} />
         </ProtectedRoute>
       )}
 

@@ -164,6 +164,202 @@ export interface UserConsentUpdateRequest {
   policy_version?: string;
 }
 
+// =============================================================================
+// Routines & Reminders
+// =============================================================================
+
+export interface RoutineStepResponse {
+  id: string;
+  routine_id: string;
+  step_order: number;
+  time_of_day: string;
+  user_product_id?: string | null;
+  product_id?: string | null;
+  step_label: string;
+  custom_instruction?: string | null;
+  frequency: string;
+  wait_time_seconds?: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoutineResponse {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string | null;
+  time_of_day: "morning" | "evening" | "midday" | "weekly" | "custom" | string;
+  frequency: string;
+  days_of_week: number[];
+  preferred_local_time?: string | null;
+  user_timezone: string;
+  is_active: boolean;
+  version: number;
+  steps: RoutineStepResponse[];
+  total_completions: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoutineListResponse {
+  items: RoutineResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface RoutineCompletionResponse {
+  id: string;
+  routine_id: string;
+  user_id: string;
+  completed_at: string;
+  status: string;
+  timezone: string;
+  step_snapshots?: unknown[];
+}
+
+export interface ReminderPreferenceResponse {
+  id: string;
+  user_id: string;
+  reminders_enabled: boolean;
+  preferred_channels: string[];
+  morning_reminder_enabled: boolean;
+  morning_reminder_time: string;
+  evening_reminder_enabled: boolean;
+  evening_reminder_time: string;
+  quiet_hours_enabled: boolean;
+  quiet_hours_start: string;
+  quiet_hours_end: string;
+  timezone_override?: string | null;
+  effective_timezone: string;
+  opted_out_at?: string | null;
+  active_notification_provider: string;
+  is_simulated_delivery: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// =============================================================================
+// Skin Scans & Longitudinal Skin Story
+// =============================================================================
+
+export interface SkinObservationResponse {
+  id: string;
+  skin_scan_id: string;
+  metric_code: string;
+  metric_label: string;
+  raw_value: number;
+  display_value: number;
+  unit: string;
+  directionality: string;
+  provider_name: string;
+  confidence?: number | null;
+  caveat_note: string;
+  observed_at: string;
+}
+
+export interface SkinScanResponse {
+  id: string;
+  user_id: string;
+  status: "pending" | "processing" | "succeeded" | "failed" | string;
+  created_at: string;
+  analyzed_at?: string | null;
+  lighting_condition: string;
+  camera_angle: string;
+  cosmetics_worn: boolean;
+  capture_notes?: string | null;
+  observations: SkinObservationResponse[];
+  media_count?: number;
+}
+
+export interface SkinScanListResponse {
+  items: SkinScanResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SkinStoryPoint {
+  observation_id: string;
+  scan_id: string;
+  observed_at: string;
+  raw_value: number;
+  display_value: number;
+  unit: string;
+  directionality: string;
+  is_comparable_to_baseline: boolean;
+  incompatibility_reason?: string | null;
+}
+
+export interface SkinMetricTimeline {
+  metric_code: string;
+  metric_label: string;
+  unit: string;
+  directionality: string;
+  points: SkinStoryPoint[];
+  comparable_point_count: number;
+  net_observed_delta?: number | null;
+  observation_classification: string;
+  non_clinical_interpretation: string;
+}
+
+export interface SkinStoryResponse {
+  user_id: string;
+  generated_at: string;
+  total_succeeded_scans: number;
+  metric_timelines: SkinMetricTimeline[];
+  recent_journal_entries: Array<{
+    id: string;
+    recorded_at: string;
+    perceived_skin_state: string;
+    self_reported_observations: string[];
+    notes?: string | null;
+  }>;
+  capture_variability_notice: string;
+  non_diagnostic_disclaimer: string;
+  pigmentation_and_causation_guardrail: string;
+}
+
+// =============================================================================
+// Product Discovery & Catalogue
+// =============================================================================
+
+export interface RecommendationAssessment {
+  is_suitable: boolean;
+  decision: string;
+  summary: string;
+  matched_positive_rules?: string[];
+  warnings?: string[];
+}
+
+export interface DiscoveryProductSummaryItem {
+  product_id: string;
+  source_id: string;
+  name: string;
+  brand: string;
+  category: string;
+  description?: string | null;
+  image_url?: string | null;
+  ingredient_count: number;
+  ingredient_data_status: "complete" | "partial_text_only" | "missing" | string;
+  on_user_shelf: boolean;
+  user_shelf_status?: string | null;
+  lowest_offer_minor_units?: number | null;
+  lowest_offer_currency?: string | null;
+  recommendation?: RecommendationAssessment;
+}
+
+export interface DiscoveryProductListResponse {
+  items: DiscoveryProductSummaryItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  search_backend_used: string;
+  rule_engine_version: string;
+}
+
 export class ApiError extends Error {
   public readonly code: string;
   public readonly status: number;

@@ -8,8 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run src/test/token-store.test.ts src/test/auth-service.test.ts src/test/auth-ui.test.tsx src/test/api-client.test.ts src/test/mobile-shell.test.tsx src/test/profile-onboarding.test.tsx",
-    "test:mocked": "vitest run src/test/token-store.test.ts src/test/auth-service.test.ts src/test/auth-ui.test.tsx src/test/api-client.test.ts src/test/mobile-shell.test.tsx src/test/profile-onboarding.test.tsx",
+    "test": "vitest run src/test/token-store.test.ts src/test/auth-service.test.ts src/test/auth-ui.test.tsx src/test/api-client.test.ts src/test/mobile-shell.test.tsx src/test/profile-onboarding.test.tsx src/test/dashboard.test.tsx",
+    "test:mocked": "vitest run src/test/token-store.test.ts src/test/auth-service.test.ts src/test/auth-ui.test.tsx src/test/api-client.test.ts src/test/mobile-shell.test.tsx src/test/profile-onboarding.test.tsx src/test/dashboard.test.tsx",
     "test:real": "vitest run src/test/real-api.test.ts",
     "test:all": "vitest run"
   },
