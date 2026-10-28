@@ -505,3 +505,95 @@ async def test_asset_view_token_security(client: httpx.AsyncClient):
     # Expired token
     resp_exp = await client.get("/api/v1/ocr/assets/view?key=media/u1/1.jpg&exp=1000&sig=invalid")
     assert resp_exp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_postgres_bytea_storage_owner_retrieve_delete_and_cross_user_denial(
+    client: httpx.AsyncClient,
+):
+    """Verify MVP PostgreSQL BYTEA storage, owner retrieval, deletion, and cross-user denial."""
+    token_a = await register_and_get_token(client, "pg_owner_a@example.com")
+    token_b = await register_and_get_token(client, "pg_intruder_b@example.com")
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+    headers_b = {"Authorization": f"Bearer {token_b}"}
+
+    img_bytes = create_test_image_bytes(format="PNG", size=(160, 160), color=(40, 120, 200))
+    resp = await client.post(
+        "/api/v1/ocr/scans",
+        files={"file": ("client_supplied_name.png", img_bytes, "image/png")},
+        headers=headers_a,
+    )
+    assert resp.status_code == 201, resp.text
+    scan_data = resp.json()["data"]
+    media_asset = scan_data["media_asset"]
+    asset_id = media_asset["id"]
+
+    # 1. Confirm PostgreSQL BYTEA storage is used by default and raw bytes are never in JSON
+    assert media_asset["storage_provider"] == "postgres"
+    assert "image_bytes" not in media_asset
+    assert media_asset["is_deleted"] is False
+
+    # 2. Owner can retrieve raw image bytes via authenticated endpoint
+    get_asset_resp = await client.get(f"/api/v1/ocr/assets/by-id/{asset_id}", headers=headers_a)
+    assert get_asset_resp.status_code == 200
+    assert get_asset_resp.headers["content-type"] == "image/png"
+    assert get_asset_resp.content == img_bytes
+
+    # 3. Cross-user access (User B) is strictly denied with 404
+    cross_get = await client.get(f"/api/v1/ocr/assets/by-id/{asset_id}", headers=headers_b)
+    assert cross_get.status_code == 404
+    cross_del = await client.delete(f"/api/v1/ocr/assets/by-id/{asset_id}", headers=headers_b)
+    assert cross_del.status_code == 404
+
+    # 4. Owner deletes the stored image bytes from PostgreSQL
+    del_resp = await client.delete(f"/api/v1/ocr/assets/by-id/{asset_id}", headers=headers_a)
+    assert del_resp.status_code == 200
+    assert del_resp.json()["data"]["status"] == "deleted"
+
+    # 5. Subsequent retrieval returns 404 and scan metadata reflects is_deleted=True, view_url=None
+    after_del = await client.get(f"/api/v1/ocr/assets/by-id/{asset_id}", headers=headers_a)
+    assert after_del.status_code == 404
+
+    scan_after = await client.get(f"/api/v1/ocr/scans/{scan_data['id']}", headers=headers_a)
+    assert scan_after.status_code == 200
+    assert scan_after.json()["data"]["media_asset"]["is_deleted"] is True
+    assert scan_after.json()["data"]["media_asset"]["view_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_ocr_delete_after_ocr_retention_policy(
+    client: httpx.AsyncClient,
+    app,
+):
+    """Verify temporary label images are purged immediately after OCR when configured."""
+    from app.core.config import Settings, get_settings
+
+    ephemeral_settings = Settings(
+        ENVIRONMENT="test",
+        DATABASE_URL="sqlite+aiosqlite:///:memory:",
+        STORAGE_PROVIDER="postgres",
+        OCR_PROVIDER="mock",
+        OCR_IMAGE_RETENTION_POLICY="delete_after_ocr",
+    )
+    app.dependency_overrides[get_settings] = lambda: ephemeral_settings
+    try:
+        token = await register_and_get_token(client, "ephemeral_ocr@example.com")
+        headers = {"Authorization": f"Bearer {token}"}
+        img_bytes = create_test_image_bytes(format="JPEG", size=(120, 120))
+
+        resp = await client.post(
+            "/api/v1/ocr/scans",
+            files={"file": ("temp_label.jpg", img_bytes, "image/jpeg")},
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        asset = resp.json()["data"]["media_asset"]
+        assert asset["retention_policy"] == "delete_after_ocr"
+        assert asset["is_deleted"] is True
+        assert asset["view_url"] is None
+
+        # Attempting to fetch purged image bytes returns 404
+        asset_resp = await client.get(f"/api/v1/ocr/assets/by-id/{asset['id']}", headers=headers)
+        assert asset_resp.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_settings, None)

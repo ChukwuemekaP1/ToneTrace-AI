@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import EnvironmentType, Settings, get_settings
 from app.core.errors import AuthenticationError, RateLimitError
+from app.core.url_safety import validate_safe_external_url
 from app.db.models import User
 from app.db.session import get_db_session
 
@@ -129,6 +130,8 @@ class InMemoryRateLimiter:
 
 auth_rate_limiter = InMemoryRateLimiter(requests_per_minute=20)
 ingest_rate_limiter = InMemoryRateLimiter(requests_per_minute=15)
+ai_explanation_rate_limiter = InMemoryRateLimiter(requests_per_minute=10)
+heavy_scan_rate_limiter = InMemoryRateLimiter(requests_per_minute=15)
 
 
 async def rate_limit_auth(
@@ -147,6 +150,39 @@ async def rate_limit_ingest(
     """FastAPI dependency for rate limiting external catalog ingestion requests."""
     client_ip = request.client.host if request.client else "unknown"
     await ingest_rate_limiter.check_rate_limit(client_ip, enabled=settings.AUTH_RATE_LIMIT_ENABLED)
+
+
+async def rate_limit_heavy_scan(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> None:
+    """FastAPI dependency for rate limiting costly multipart OCR and skin-analysis uploads."""
+    client_ip = request.client.host if request.client else "unknown"
+    await heavy_scan_rate_limiter.check_rate_limit(
+        client_ip,
+        enabled=settings.AUTH_RATE_LIMIT_ENABLED,
+    )
+
+
+__all__ = [
+    "ai_explanation_rate_limiter",
+    "auth_rate_limiter",
+    "create_access_token",
+    "decode_access_token",
+    "generate_refresh_token",
+    "get_current_active_user",
+    "get_current_user",
+    "hash_password",
+    "hash_token",
+    "heavy_scan_rate_limiter",
+    "ingest_rate_limiter",
+    "rate_limit_ai_explanations",
+    "rate_limit_auth",
+    "rate_limit_heavy_scan",
+    "rate_limit_ingest",
+    "validate_safe_external_url",
+    "verify_password",
+]
 
 
 async def get_current_user(
@@ -233,4 +269,17 @@ async def get_current_active_user(
     """Ensure the authenticated user account is in 'active' status."""
     if current_user.account_status != "active":
         raise AuthenticationError("User account is inactive or suspended.")
+    return current_user
+
+
+async def rate_limit_ai_explanations(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> User:
+    """Enforce per-user sliding-window rate limits on AI explanation requests."""
+    ai_explanation_rate_limiter.requests_per_minute = settings.AI_RATE_LIMIT_PER_MINUTE
+    await ai_explanation_rate_limiter.check_rate_limit(
+        f"user:{current_user.id}",
+        enabled=settings.AUTH_RATE_LIMIT_ENABLED,
+    )
     return current_user

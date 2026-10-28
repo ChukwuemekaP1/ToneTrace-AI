@@ -109,6 +109,7 @@ async def test_client_supplied_user_id_rejected_in_production():
 
     settings = Settings(
         ENVIRONMENT=EnvironmentType.PRODUCTION,
+        DEBUG=False,
         ALLOW_DEV_AUTH_BYPASS=False,
         DATABASE_URL="postgresql+psycopg://user:pass@localhost/db",
         AUTH_JWT_SECRET="production-super-secret-key-at-least-32-chars-long-12345",

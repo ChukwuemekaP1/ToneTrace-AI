@@ -1,5 +1,29 @@
 """API routes package."""
 
-from app.api.routes import auth, catalog, health, me, ocr, search
+from app.api.routes import (
+    ai,
+    auth,
+    catalog,
+    evidence,
+    health,
+    me,
+    ocr,
+    routines,
+    search,
+    shelf,
+    skin,
+)
 
-__all__ = ["auth", "catalog", "health", "me", "ocr", "search"]
+__all__ = [
+    "ai",
+    "auth",
+    "catalog",
+    "evidence",
+    "health",
+    "me",
+    "ocr",
+    "routines",
+    "search",
+    "shelf",
+    "skin",
+]

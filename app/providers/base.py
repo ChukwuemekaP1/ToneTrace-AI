@@ -115,18 +115,24 @@ def evaluate_integration_status(settings: Settings) -> dict[str, IntegrationItem
     has_skin_api = bool(
         settings.SKIN_ANALYSIS_API_KEY and settings.SKIN_ANALYSIS_API_KEY.get_secret_value().strip()
     )
+    skin_state = (
+        IntegrationState.CONFIGURED
+        if (has_skin_api or settings.SKIN_ANALYSIS_PROVIDER == "mock")
+        else IntegrationState.UNCONFIGURED
+    )
     integrations["skin_analysis"] = IntegrationItem(
-        state=IntegrationState.CONFIGURED if has_skin_api else IntegrationState.UNCONFIGURED,
-        provider="Dermatological Analysis Engine",
-        description="Skin metric quantification and visual concern detection.",
+        state=skin_state,
+        provider=f"Perfect Corp YouCam S2S v2.0 ({settings.SKIN_ANALYSIS_PROVIDER})"
+        if has_skin_api
+        else settings.SKIN_ANALYSIS_PROVIDER,
+        description="Skin metric quantification and visual observation engine.",
     )
 
-    # 8. Cloud Object Storage
-    has_storage = bool(settings.STORAGE_BUCKET_NAME)
+    # 8. Private Image Storage (MVP: PostgreSQL BYTEA; no external credentials required)
     integrations["object_storage"] = IntegrationItem(
-        state=IntegrationState.CONFIGURED if has_storage else IntegrationState.UNCONFIGURED,
-        provider=settings.STORAGE_PROVIDER.upper(),
-        description="Facial scan images and processed asset store.",
+        state=IntegrationState.CONFIGURED,
+        provider=f"{settings.STORAGE_PROVIDER.upper()} (private image storage)",
+        description="Private facial scan and label image storage backed by PostgreSQL BYTEA.",
     )
 
     # 9. Open Beauty Facts
@@ -142,8 +148,30 @@ def evaluate_integration_status(settings: Settings) -> dict[str, IntegrationItem
     )
     integrations["channel3"] = IntegrationItem(
         state=IntegrationState.CONFIGURED if has_channel3 else IntegrationState.UNCONFIGURED,
-        provider="Channel3 Retail API",
+        provider="Channel3 Retail API v1",
         description="Commercial cosmetic merchant offers, prices, and stock availability.",
+    )
+
+    # 11. European Commission CosIng
+    has_cosing = bool(settings.COSING_API_URL and settings.COSING_API_URL.strip())
+    integrations["cosing"] = IntegrationItem(
+        state=IntegrationState.CONFIGURED if has_cosing else IntegrationState.UNCONFIGURED,
+        provider="European Commission CosIng (GROWTH_COSING)",
+        description=(
+            "Official EU cosmetic ingredient reference nomenclature, functions, and restrictions."
+        ),
+    )
+
+    # 12. NCBI PubMed E-utilities
+    has_pubmed = bool(
+        settings.PUBMED_BASE_URL
+        and settings.PUBMED_TOOL_NAME.strip()
+        and settings.PUBMED_CONTACT_EMAIL.strip()
+    )
+    integrations["pubmed"] = IntegrationItem(
+        state=IntegrationState.CONFIGURED if has_pubmed else IntegrationState.UNCONFIGURED,
+        provider="NCBI Entrez PubMed E-utilities",
+        description="Biomedical literature bibliographic metadata and abstracts.",
     )
 
     return integrations

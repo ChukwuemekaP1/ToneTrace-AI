@@ -25,12 +25,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -142,6 +143,54 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         "MediaAsset",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+    skin_scans: Mapped[list["SkinScan"]] = relationship(
+        "SkinScan",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="desc(SkinScan.created_at)",
+    )
+    skin_journal_entries: Mapped[list["SkinJournalEntry"]] = relationship(
+        "SkinJournalEntry",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="desc(SkinJournalEntry.recorded_at)",
+    )
+    shelf_products: Mapped[list["UserProduct"]] = relationship(
+        "UserProduct",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="desc(UserProduct.created_at)",
+    )
+    product_reactions: Mapped[list["ProductReaction"]] = relationship(
+        "ProductReaction",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="desc(ProductReaction.observed_at)",
+    )
+    routines: Mapped[list["Routine"]] = relationship(
+        "Routine",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="desc(Routine.created_at)",
+    )
+    routine_completions: Mapped[list["RoutineCompletion"]] = relationship(
+        "RoutineCompletion",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="desc(RoutineCompletion.completed_at)",
+    )
+    reminder_preference: Mapped["ReminderPreference | None"] = relationship(
+        "ReminderPreference",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    reminder_deliveries: Mapped[list["ReminderDeliveryRecord"]] = relationship(
+        "ReminderDeliveryRecord",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="desc(ReminderDeliveryRecord.created_at)",
     )
 
     def __repr__(self) -> str:
@@ -750,6 +799,11 @@ class Ingredient(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         back_populates="ingredient",
         cascade="all, delete-orphan",
     )
+    evidence_items: Mapped[list["IngredientEvidence"]] = relationship(
+        "IngredientEvidence",
+        back_populates="ingredient",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<Ingredient id={self.id} inci={self.inci_name}>"
@@ -1000,7 +1054,11 @@ class SearchOutbox(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
 
 class MediaAsset(Base, UUIDPrimaryKeyMixin, TimestampMixin):
-    """Uploaded user image asset stored in private object storage."""
+    """Uploaded user image asset stored privately in PostgreSQL BYTEA for the MVP.
+
+    Uses deferred loading on `image_bytes` so ordinary metadata queries never return
+    raw image bytes by default.
+    """
 
     __tablename__ = "media_assets"
 
@@ -1013,15 +1071,15 @@ class MediaAsset(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     storage_provider: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        default="local",
-        comment="Storage backend: 'local' or 's3'",
+        default="postgres",
+        comment="Storage backend: 'postgres' (MVP BYTEA) or 'local'",
     )
     storage_key: Mapped[str] = mapped_column(
         String(500),
         nullable=False,
         unique=True,
         index=True,
-        comment="Private object storage path or S3 key",
+        comment="Random UUID-based private storage identifier",
     )
     original_filename: Mapped[str | None] = mapped_column(
         String(255),
@@ -1054,6 +1112,37 @@ class MediaAsset(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         index=True,
         comment="SHA-256 digest of image content",
     )
+    image_bytes: Mapped[bytes | None] = deferred(
+        mapped_column(
+            LargeBinary,
+            nullable=True,
+            comment="Validated raw image binary stored in PostgreSQL BYTEA; NULL when purged",
+        )
+    )
+    retention_policy: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="ocr_retain_30d",
+        comment="Retention rule (delete_after_ocr, ocr_retain_Nd, user_controlled_Nd)",
+    )
+    retention_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        comment="UTC timestamp after which image_bytes are eligible for automatic purge",
+    )
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        index=True,
+        comment="True once raw image_bytes have been deleted/purged",
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="UTC timestamp when raw image_bytes were deleted/purged",
+    )
 
     __table_args__ = (Index("ix_media_assets_user_created", "user_id", "created_at"),)
 
@@ -1066,7 +1155,10 @@ class MediaAsset(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     def __repr__(self) -> str:
-        return f"<MediaAsset id={self.id} user={self.user_id} key={self.storage_key}>"
+        return (
+            f"<MediaAsset id={self.id} user={self.user_id} "
+            f"provider={self.storage_provider} deleted={self.is_deleted}>"
+        )
 
 
 class OCRJob(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -1220,4 +1312,1618 @@ class OCRCandidateIngredient(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         return (
             f"<OCRCandidateIngredient id={self.id} job={self.ocr_job_id} "
             f"pos={self.position} name={self.normalized_name}>"
+        )
+
+
+# ==============================================================================
+# PHASE 6: INGREDIENT EVIDENCE AND RESEARCH RETRIEVAL MODELS
+# ==============================================================================
+
+
+class ResearchRecord(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Deduplicated bibliographic article or regulatory reference monograph.
+
+    Stores official PubMed E-utilities citations/abstracts and EC CosIng inventory entries.
+    Never claims full-text possession when only metadata or abstracts were retrieved.
+    """
+
+    __tablename__ = "research_records"
+
+    source_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+        comment="Source system identifier: pubmed, cosing, sccs, manual_curated",
+    )
+    external_id: Mapped[str] = mapped_column(
+        String(120),
+        nullable=False,
+        index=True,
+        comment="External canonical ID (e.g. PMID '41319172' or CosIng Ref No '83218')",
+    )
+    doi: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+        index=True,
+        comment="Digital Object Identifier when available",
+    )
+    title: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="Article title or official regulatory monograph heading",
+    )
+    authors: Mapped[list[str]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=list,
+        comment="Ordered list of author names or authoring body",
+    )
+    journal_or_authority: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Journal name or regulatory authority (e.g. European Commission CosIng)",
+    )
+    publication_year: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        index=True,
+        comment="Year of publication or regulatory inventory update",
+    )
+    publication_types: Mapped[list[str]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=list,
+        comment=(
+            "Publication types (e.g. Randomized Controlled Trial, Review, Regulatory Monograph)"
+        ),
+    )
+    study_type: Mapped[str | None] = mapped_column(
+        String(80),
+        nullable=True,
+        index=True,
+        comment=(
+            "Normalized design: rct, clinical_trial, meta_analysis, systematic_review, "
+            "in_vitro, observational, review, regulatory_monograph, journal_article"
+        ),
+    )
+    abstract_text: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Abstract text or regulatory chemical description; explicitly None when absent",
+    )
+    has_full_text: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Explicitly False when only bibliographic metadata or abstract was retrieved",
+    )
+    source_url: Mapped[str] = mapped_column(
+        String(1024),
+        nullable=False,
+        comment="Authoritative permalink to source record",
+    )
+    license_or_attribution: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+        comment="Mandatory source attribution and terms of use notice",
+    )
+    raw_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=dict,
+        comment="Structured provenance metadata (CAS/EC numbers, MeSH terms, restrictions)",
+    )
+    retrieved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        index=True,
+        comment="UTC timestamp when this record was retrieved from upstream",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source_type",
+            "external_id",
+            name="uq_research_records_source_external_id",
+        ),
+    )
+
+    # Relationships
+    source_links: Mapped[list["EvidenceSourceLink"]] = relationship(
+        "EvidenceSourceLink",
+        back_populates="research_record",
+        cascade="all, delete-orphan",
+    )
+
+    def __repr__(self) -> str:
+        return f"<ResearchRecord id={self.id} source={self.source_type} ext_id={self.external_id}>"
+
+
+class IngredientEvidence(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Auditable evidence assertion or record mapped to a canonical Ingredient.
+
+    Strictly separates:
+    1. identity_reference (Ingredient identity, CAS/EC, official CosIng functions & restrictions)
+    2. published_research (Published scientific literature records)
+    3. human_interpretation (Authored/reviewed dermatological interpretations)
+    4. marketing_claim (Commercial product marketing claims, segregated from science)
+    """
+
+    __tablename__ = "ingredient_evidence"
+
+    ingredient_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("ingredients.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Canonical ingredient being described",
+    )
+    evidence_category: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+        comment=(
+            "One of: identity_reference, published_research, human_interpretation, marketing_claim"
+        ),
+    )
+    topic_or_target: Mapped[str] = mapped_column(
+        String(150),
+        nullable=False,
+        index=True,
+        comment=(
+            "Dermatological topic or regulatory scope "
+            "(e.g. hyperpigmentation, skin_barrier, cosing_function)"
+        ),
+    )
+    evidence_direction: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="neutral",
+        comment="Direction: supportive, neutral, conflicting, insufficient, reference_only",
+    )
+    evidence_strength: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="preliminary",
+        comment=(
+            "Strength: strong, moderate, limited, preliminary, "
+            "conflicting, insufficient, reference_only"
+        ),
+    )
+    study_type: Mapped[str | None] = mapped_column(
+        String(80),
+        nullable=True,
+        index=True,
+        comment=(
+            "Study design when applicable "
+            "(rct, clinical_trial, in_vitro, regulatory_monograph, etc.)"
+        ),
+    )
+    population_or_context: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Study population, experimental model, or formulation context when known",
+    )
+    summary_statement: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="Provenance-backed summary statement; never treated as personal clinical diagnosis",
+    )
+    limitations_and_caveats: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment=(
+            "Explicit limitations (abstract-only, unknown concentration, conflicting data, etc.)"
+        ),
+    )
+    author_or_reviewer: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+        comment="Originating importer or human reviewer identifier",
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="provisional",
+        index=True,
+        comment=(
+            "Status: provisional, verified, conflicting_flagged, incorrect_match_flagged, rejected"
+        ),
+    )
+    retrieved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        index=True,
+        comment="UTC timestamp when evidence was retrieved or authored",
+    )
+
+    __table_args__ = (
+        Index("ix_ing_evidence_ing_cat", "ingredient_id", "evidence_category"),
+        Index("ix_ing_evidence_ing_status", "ingredient_id", "review_status"),
+    )
+
+    # Relationships
+    ingredient: Mapped["Ingredient"] = relationship("Ingredient", back_populates="evidence_items")
+    source_links: Mapped[list["EvidenceSourceLink"]] = relationship(
+        "EvidenceSourceLink",
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+    )
+    review_history: Mapped[list["EvidenceReviewStatus"]] = relationship(
+        "EvidenceReviewStatus",
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+        order_by="EvidenceReviewStatus.reviewed_at.desc()",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<IngredientEvidence id={self.id} ing={self.ingredient_id} "
+            f"cat={self.evidence_category} status={self.review_status}>"
+        )
+
+
+class EvidenceSourceLink(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Provenance bridge linking an IngredientEvidence entry to ResearchRecord and DataSource."""
+
+    __tablename__ = "evidence_source_links"
+
+    evidence_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("ingredient_evidence.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Parent ingredient evidence entry",
+    )
+    research_record_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("research_records.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Linked bibliographic or regulatory research record",
+    )
+    data_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Linked upstream DataSource provenance record",
+    )
+    is_exact_match: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment=(
+            "False if article/monograph matched a derivative or lacked verified exact INCI match"
+        ),
+    )
+    relevance_note: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="Explanation of how the source record relates to the ingredient",
+    )
+    quoted_excerpt: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Relevant verbatim excerpt from abstract or regulatory restriction",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "evidence_id",
+            "research_record_id",
+            name="uq_evidence_source_links_ev_rec",
+        ),
+    )
+
+    # Relationships
+    evidence: Mapped["IngredientEvidence"] = relationship(
+        "IngredientEvidence", back_populates="source_links"
+    )
+    research_record: Mapped["ResearchRecord"] = relationship(
+        "ResearchRecord", back_populates="source_links"
+    )
+    data_source: Mapped["DataSource | None"] = relationship("DataSource")
+
+    def __repr__(self) -> str:
+        return (
+            f"<EvidenceSourceLink id={self.id} ev={self.evidence_id} rec={self.research_record_id}>"
+        )
+
+
+class EvidenceReviewStatus(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Immutable audit log of review status transitions on an IngredientEvidence record."""
+
+    __tablename__ = "evidence_review_status"
+
+    evidence_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("ingredient_evidence.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Reviewed evidence record",
+    )
+    reviewer_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Authenticated user who performed the review (None if automated system check)",
+    )
+    previous_status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="Status prior to transition",
+    )
+    new_status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+        comment=(
+            "New review status: provisional, verified, conflicting_flagged, "
+            "incorrect_match_flagged, rejected"
+        ),
+    )
+    review_notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Justification, limitations noted, or reason for rejection/flagging",
+    )
+    reviewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        index=True,
+        comment="UTC timestamp of review action",
+    )
+
+    # Relationships
+    evidence: Mapped["IngredientEvidence"] = relationship(
+        "IngredientEvidence", back_populates="review_history"
+    )
+    reviewer: Mapped["User | None"] = relationship("User")
+
+    def __repr__(self) -> str:
+        return (
+            f"<EvidenceReviewStatus id={self.id} ev={self.evidence_id} "
+            f"{self.previous_status}->{self.new_status}>"
+        )
+
+
+# ==============================================================================
+# PHASE 8: SKIN ANALYSIS AND SKIN STORY MODELS
+# ==============================================================================
+
+
+class AnalysisJob(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Shared asynchronous or synchronous external analysis job record.
+
+    Tracks provider task execution, retries, timeouts, and failure categories
+    independently of user-facing domain observations.
+    """
+
+    __tablename__ = "analysis_jobs"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owner user identifier",
+    )
+    job_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="skin_analysis",
+        index=True,
+        comment="Analysis pipeline type (e.g. skin_analysis)",
+    )
+    provider: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+        comment="External or mock provider identifier (e.g. youcam, mock)",
+    )
+    provider_task_id: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+        index=True,
+        comment="External provider asynchronous task identifier when applicable",
+    )
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="pending",
+        index=True,
+        comment="Lifecycle status: pending, processing, succeeded, failed, cancelled",
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+        index=True,
+        comment="Optional client-supplied idempotency key",
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        comment="Number of provider submission or polling attempts",
+    )
+    max_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=3,
+        comment="Maximum allowed retry attempts",
+    )
+    error_category: Mapped[str | None] = mapped_column(
+        String(60),
+        nullable=True,
+        comment="Normalized error category when failed",
+    )
+    error_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Sanitized diagnostic failure message",
+    )
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        comment="UTC timestamp when job was initialized",
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="UTC timestamp when job reached a terminal state",
+    )
+
+    __table_args__ = (
+        Index("ix_analysis_jobs_user_status", "user_id", "status"),
+        UniqueConstraint(
+            "user_id",
+            "job_type",
+            "idempotency_key",
+            name="uq_analysis_jobs_user_type_idempotency",
+        ),
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User")
+    skin_scan: Mapped["SkinScan | None"] = relationship(
+        "SkinScan",
+        back_populates="analysis_job",
+        uselist=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<AnalysisJob id={self.id} type={self.job_type} "
+            f"provider={self.provider} status={self.status}>"
+        )
+
+
+class SkinScan(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """User-initiated facial skin analysis scan record.
+
+    Records explicit consent linkage, provider provenance, model version,
+    capture conditions, and lifecycle status. Never stores image bytes in PostgreSQL
+    or retains unrestricted raw provider payloads without a retention policy.
+    """
+
+    __tablename__ = "skin_scans"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owning user identifier",
+    )
+    consent_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user_consents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Verified UserConsent record authorizing facial scan processing",
+    )
+    analysis_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("analysis_jobs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Associated shared AnalysisJob execution record",
+    )
+    provider: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+        comment="Skin analysis provider: youcam or mock",
+    )
+    provider_task_id: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+        index=True,
+        comment="External provider task ID where applicable",
+    )
+    provider_model_version: Mapped[str | None] = mapped_column(
+        String(80),
+        nullable=True,
+        comment="Provider/model version identifier (e.g. youcam-s2s-v2.0)",
+    )
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="pending",
+        index=True,
+        comment="Scan status: pending, processing, succeeded, failed, deleted",
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+        index=True,
+        comment="Deduplication key to prevent duplicate scan creation on retry",
+    )
+    capture_conditions: Mapped[dict[str, Any]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=dict,
+        comment="Self-reported lighting, camera angle, makeup/cosmetics state, and notes",
+    )
+    overall_score: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="Optional composite display score (0-100) when reported by provider",
+    )
+    skin_type_observation: Mapped[str | None] = mapped_column(
+        String(60),
+        nullable=True,
+        comment="Provider-observed visual skin surface type (e.g. combination, oily, dry, normal)",
+    )
+    error_category: Mapped[str | None] = mapped_column(
+        String(60),
+        nullable=True,
+        comment=(
+            "Failure category: provider_timeout, provider_unavailable, rate_limited, "
+            "invalid_image, no_face_detected, authentication_error, upstream_error"
+        ),
+    )
+    error_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Sanitized diagnostic error message",
+    )
+    raw_payload_retained: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Explicit flag confirming restricted raw provider responses are not retained",
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="UTC timestamp when scan processing finished",
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="UTC timestamp when user deleted scan media and observations",
+    )
+
+    __table_args__ = (
+        Index("ix_skin_scans_user_created", "user_id", "created_at"),
+        Index("ix_skin_scans_user_status", "user_id", "status"),
+        UniqueConstraint(
+            "user_id",
+            "idempotency_key",
+            name="uq_skin_scans_user_idempotency",
+        ),
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="skin_scans")
+    consent: Mapped["UserConsent | None"] = relationship("UserConsent")
+    analysis_job: Mapped["AnalysisJob | None"] = relationship(
+        "AnalysisJob",
+        back_populates="skin_scan",
+    )
+    media_items: Mapped[list["ScanMedia"]] = relationship(
+        "ScanMedia",
+        back_populates="skin_scan",
+        cascade="all, delete-orphan",
+        order_by="ScanMedia.created_at",
+    )
+    observations: Mapped[list["SkinObservation"]] = relationship(
+        "SkinObservation",
+        back_populates="skin_scan",
+        cascade="all, delete-orphan",
+        order_by="SkinObservation.metric_code",
+    )
+    journal_entries: Mapped[list["SkinJournalEntry"]] = relationship(
+        "SkinJournalEntry",
+        back_populates="skin_scan",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SkinScan id={self.id} user={self.user_id} "
+            f"provider={self.provider} status={self.status}>"
+        )
+
+
+class ScanMedia(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Private object storage media reference and retention metadata for a SkinScan.
+
+    Photos and masks are stored strictly in private object storage (never PostgreSQL)
+    with explicit retention expiration and deletion tracking.
+    """
+
+    __tablename__ = "scan_media"
+
+    skin_scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("skin_scans.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Parent skin scan",
+    )
+    media_asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Linked MediaAsset record when uploaded by user",
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owning user identifier for direct ownership verification",
+    )
+    media_role: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="source_photo",
+        comment="Asset role: source_photo or overlay_mask",
+    )
+    metric_code: Mapped[str | None] = mapped_column(
+        String(60),
+        nullable=True,
+        comment="Associated metric code if media_role is overlay_mask",
+    )
+    storage_provider: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="postgres",
+        comment="Private storage provider ('postgres' MVP BYTEA or 'local')",
+    )
+    storage_key: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+        index=True,
+        comment="Private object storage key",
+    )
+    content_type: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        comment="Verified MIME type (image/jpeg, image/png, image/webp)",
+    )
+    file_size_bytes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        comment="Object size in bytes",
+    )
+    retention_policy: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="user_controlled_90d",
+        comment="Retention rule governing automatic or user-initiated purge",
+    )
+    retention_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+        comment="UTC timestamp after which object is eligible for retention purge",
+    )
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        index=True,
+        comment="True once underlying private storage object has been purged",
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="UTC timestamp when private object was deleted",
+    )
+
+    __table_args__ = (Index("ix_scan_media_user_deleted", "user_id", "is_deleted"),)
+
+    # Relationships
+    skin_scan: Mapped["SkinScan"] = relationship("SkinScan", back_populates="media_items")
+    media_asset: Mapped["MediaAsset | None"] = relationship("MediaAsset")
+    user: Mapped["User"] = relationship("User")
+
+    def __repr__(self) -> str:
+        return (
+            f"<ScanMedia id={self.id} scan={self.skin_scan_id} "
+            f"role={self.media_role} deleted={self.is_deleted}>"
+        )
+
+
+class SkinObservation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Normalized visual skin metric observation extracted from a SkinScan.
+
+    Stores normalized metric codes, raw values, display values, units, directionality,
+    and interpretation versions separately from restricted raw provider responses.
+    """
+
+    __tablename__ = "skin_observations"
+
+    skin_scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("skin_scans.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Parent skin scan record",
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owning user identifier for longitudinal queries",
+    )
+    metric_code: Mapped[str] = mapped_column(
+        String(60),
+        nullable=False,
+        index=True,
+        comment=(
+            "Normalized metric code: spots, redness, texture, pores, wrinkles, "
+            "acne, oiliness, moisture, radiance, firmness, dark_circles, eye_bags"
+        ),
+    )
+    metric_label: Mapped[str] = mapped_column(
+        String(120),
+        nullable=False,
+        comment="User-visible non-diagnostic label for this visual observation",
+    )
+    raw_value: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        comment="Underlying raw score reported by the provider algorithm",
+    )
+    display_value: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        comment="Normalized display value (e.g. 0.0 to 100.0)",
+    )
+    unit: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="score_0_100",
+        comment="Measurement unit or scale identifier (e.g. score_0_100)",
+    )
+    directionality: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="higher_is_better",
+        comment="Scale direction: higher_is_better (e.g. YouCam UI score) or lower_is_better",
+    )
+    provider_name: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+        comment="Provider that produced this observation (youcam, mock)",
+    )
+    provider_model_version: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        comment="Exact provider/model version required for longitudinal comparability checks",
+    )
+    interpretation_version: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="tonetrace-obs-v1.0",
+        comment="ToneTrace normalization and interpretation schema version",
+    )
+    facial_zone: Mapped[str] = mapped_column(
+        String(60),
+        nullable=False,
+        default="full_face",
+        comment="Evaluated facial region (e.g. full_face, forehead, cheeks, periorbital)",
+    )
+    confidence: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="Optional provider confidence (0.0 to 1.0) when available",
+    )
+    caveat_note: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment=(
+            "Explicit non-clinical caveat regarding lighting, camera, angle, and cosmetics impact"
+        ),
+    )
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        index=True,
+        comment="UTC timestamp when the visual observation was recorded",
+    )
+
+    __table_args__ = (
+        Index("ix_skin_obs_user_metric_time", "user_id", "metric_code", "observed_at"),
+        UniqueConstraint(
+            "skin_scan_id",
+            "metric_code",
+            "facial_zone",
+            name="uq_skin_obs_scan_metric_zone",
+        ),
+    )
+
+    # Relationships
+    skin_scan: Mapped["SkinScan"] = relationship("SkinScan", back_populates="observations")
+    user: Mapped["User"] = relationship("User")
+
+    def __repr__(self) -> str:
+        return (
+            f"<SkinObservation id={self.id} scan={self.skin_scan_id} "
+            f"metric={self.metric_code} display={self.display_value}>"
+        )
+
+
+class SkinJournalEntry(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """User-authored longitudinal skin story journal entry.
+
+    Captures self-reported skin state, perceived visual changes, routine notes,
+    and environmental/lighting context alongside optional scan links.
+    """
+
+    __tablename__ = "skin_journal_entries"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owning user identifier",
+    )
+    skin_scan_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("skin_scans.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional SkinScan linked to this journal entry",
+    )
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        index=True,
+        comment="UTC timestamp of the journal observation",
+    )
+    perceived_skin_state: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        comment="User's overall perceived skin state (e.g. calm, dry, balanced, irritated)",
+    )
+    self_reported_observations: Mapped[list[str]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=list,
+        comment="List of user-observed surface notes (e.g. cheek redness, uneven tone)",
+    )
+    routine_notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Notes on current morning/evening routine or active changes",
+    )
+    products_used: Mapped[list[str]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=list,
+        comment="List of product names or IDs used around this entry",
+    )
+    environmental_or_lifestyle_factors: Mapped[dict[str, Any]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=dict,
+        comment="Contextual factors (lighting, climate, UV exposure, cosmetics worn, sleep)",
+    )
+    notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Additional free-form user reflection",
+    )
+
+    __table_args__ = (Index("ix_skin_journal_user_recorded", "user_id", "recorded_at"),)
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="skin_journal_entries")
+    skin_scan: Mapped["SkinScan | None"] = relationship(
+        "SkinScan",
+        back_populates="journal_entries",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SkinJournalEntry id={self.id} user={self.user_id} "
+            f"state={self.perceived_skin_state} at={self.recorded_at}>"
+        )
+
+
+# ==============================================================================
+# PHASE 9: MY SHELF AND PRODUCT DISCOVERY MODELS
+# ==============================================================================
+
+
+class UserProduct(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """User-owned product item on their personal skincare shelf ('My Shelf').
+
+    Supports both public catalogue-linked products (via product_id) and custom
+    user-defined products (is_custom=True) that are not in the public catalogue.
+    Personal notes and shelf items are strictly private to the owning user by default.
+    """
+
+    __tablename__ = "user_products"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owning user identifier",
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("products.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Linked public catalogue Product ID when available; None for custom products",
+    )
+    variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("product_variants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional linked ProductVariant SKU",
+    )
+    ocr_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ocr_jobs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional OCR scan job that supplied the custom ingredient declaration",
+    )
+    is_custom: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        index=True,
+        comment="True when item is a custom user entry not linked to a public catalogue record",
+    )
+    custom_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Custom product name (required when product_id is None)",
+    )
+    custom_brand: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+        comment="Custom brand name when product_id is None",
+    )
+    custom_category: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="Custom skincare category (e.g. cleanser, serum, sunscreen)",
+    )
+    custom_ingredient_text: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="User-entered or OCR-derived raw ingredient list for a custom product",
+    )
+    status: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="in_use",
+        index=True,
+        comment="Shelf status: in_use, wishlist, finished, paused, discontinued, avoided",
+    )
+    opened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Optional UTC timestamp when the product container was opened",
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Optional UTC expiration or PAO (Period After Opening) target date",
+    )
+    purchase_price_minor_units: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Optional user-recorded purchase price in integer minor currency units",
+    )
+    purchase_currency: Mapped[str | None] = mapped_column(
+        String(3),
+        nullable=True,
+        comment="Optional ISO 4217 currency code for purchase_price_minor_units",
+    )
+    private_notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Strictly private personal product notes; never shared publicly",
+    )
+    is_public: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Privacy flag; personal shelf items and notes are private (False) by default",
+    )
+
+    __table_args__ = (
+        Index("ix_user_products_user_status", "user_id", "status"),
+        Index("ix_user_products_user_product", "user_id", "product_id"),
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="shelf_products")
+    product: Mapped["Product | None"] = relationship("Product")
+    variant: Mapped["ProductVariant | None"] = relationship("ProductVariant")
+    ocr_job: Mapped["OCRJob | None"] = relationship("OCRJob")
+    reactions: Mapped[list["ProductReaction"]] = relationship(
+        "ProductReaction",
+        back_populates="user_product",
+        cascade="all, delete-orphan",
+        order_by="desc(ProductReaction.observed_at)",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<UserProduct id={self.id} user={self.user_id} "
+            f"product={self.product_id} custom={self.is_custom} status={self.status}>"
+        )
+
+
+class ProductReaction(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """User-reported skin reaction or tolerance log for a shelf or catalogue product.
+
+    Used to track personal product tolerance and inform transparent rule-based
+    suitability warnings without claiming clinical allergy diagnosis.
+    """
+
+    __tablename__ = "product_reactions"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owning user identifier",
+    )
+    user_product_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user_products.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Optional associated shelf item",
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("products.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional linked public catalogue product ID",
+    )
+    routine_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("routines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional routine context during which the reaction was observed",
+    )
+    reaction_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+        comment=(
+            "Reaction category: well_tolerated, irritation, redness, breakout, "
+            "dryness, stinging, allergic_suspect, no_visible_change"
+        ),
+    )
+    severity: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="none",
+        comment="Perceived severity: none, mild, moderate, severe",
+    )
+    symptoms: Mapped[list[str]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=list,
+        comment="User-reported visible or sensory symptoms (e.g. swelling, hives, burning)",
+    )
+    is_rapidly_worsening: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="True if the user reports a rapidly worsening or spreading reaction",
+    )
+    urgent_care_escalation_shown: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="True when urgent-care guidance was surfaced instead of ordinary recommendations",
+    )
+    suspected_ingredient_names: Mapped[list[str]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=list,
+        comment="Optional user-suspected ingredient names associated with this reaction",
+    )
+    notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Private user notes describing the reaction context",
+    )
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        index=True,
+        comment="UTC timestamp when reaction or tolerance was observed",
+    )
+
+    __table_args__ = (Index("ix_product_reactions_user_type", "user_id", "reaction_type"),)
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="product_reactions")
+    user_product: Mapped["UserProduct | None"] = relationship(
+        "UserProduct",
+        back_populates="reactions",
+    )
+    product: Mapped["Product | None"] = relationship("Product")
+    routine: Mapped["Routine | None"] = relationship("Routine")
+
+    def __repr__(self) -> str:
+        return (
+            f"<ProductReaction id={self.id} user_product={self.user_product_id} "
+            f"type={self.reaction_type} severity={self.severity}>"
+        )
+
+
+# ==============================================================================
+# PHASE 10: ROUTINES, REMINDERS AND REACTIONS MODELS
+# ==============================================================================
+
+
+class Routine(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """User skincare routine definition with ordered steps and scheduling metadata."""
+
+    __tablename__ = "routines"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owning user identifier",
+    )
+    name: Mapped[str] = mapped_column(
+        String(150),
+        nullable=False,
+        comment="Routine title (e.g. Morning Brightening & SPF Routine)",
+    )
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Optional user description or goal notes for this routine",
+    )
+    time_of_day: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="morning",
+        index=True,
+        comment="Primary routine slot: morning, evening, midday, weekly, custom",
+    )
+    frequency: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="daily",
+        comment="Schedule cadence: daily, every_other_day, weekly, custom_days",
+    )
+    days_of_week: Mapped[list[int]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=list,
+        comment="Optional ISO weekday numbers (0=Mon..6=Sun) when frequency=custom_days",
+    )
+    preferred_local_time: Mapped[str | None] = mapped_column(
+        String(5),
+        nullable=True,
+        comment="Optional preferred 24h local time (HH:MM) in the user's configured timezone",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        index=True,
+        comment="Whether the routine is currently active",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        comment="Monotonically increasing routine revision number",
+    )
+
+    __table_args__ = (Index("ix_routines_user_active_tod", "user_id", "is_active", "time_of_day"),)
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="routines")
+    steps: Mapped[list["RoutineStep"]] = relationship(
+        "RoutineStep",
+        back_populates="routine",
+        cascade="all, delete-orphan",
+        order_by="RoutineStep.step_order",
+    )
+    completions: Mapped[list["RoutineCompletion"]] = relationship(
+        "RoutineCompletion",
+        back_populates="routine",
+        order_by="desc(RoutineCompletion.completed_at)",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<Routine id={self.id} user={self.user_id} name={self.name!r} "
+            f"tod={self.time_of_day} v={self.version}>"
+        )
+
+
+class RoutineStep(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Ordered step within a user's Routine referencing a shelf item, product, or instruction."""
+
+    __tablename__ = "routine_steps"
+
+    routine_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("routines.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Parent routine identifier",
+    )
+    step_order: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        comment="1-based execution order within the routine",
+    )
+    time_of_day: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="morning",
+        comment="Step time-of-day slot: morning, evening, midday, any",
+    )
+    user_product_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user_products.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional reference to an item on the user's personal shelf",
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("products.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional reference to a public catalogue product",
+    )
+    step_label: Mapped[str] = mapped_column(
+        String(200),
+        nullable=False,
+        comment="Resolved display label for the step or product",
+    )
+    custom_instruction: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Custom application instruction or non-product step description",
+    )
+    frequency: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="every_session",
+        comment="Step frequency: every_session, daily, alternate_days, twice_weekly, weekly",
+    )
+    wait_time_seconds: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Optional wait duration in seconds after applying this step",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment="Whether this step is currently active in the routine",
+    )
+
+    __table_args__ = (Index("ix_routine_steps_routine_order", "routine_id", "step_order"),)
+
+    # Relationships
+    routine: Mapped["Routine"] = relationship("Routine", back_populates="steps")
+    user_product: Mapped["UserProduct | None"] = relationship("UserProduct")
+    product: Mapped["Product | None"] = relationship("Product")
+
+    def __repr__(self) -> str:
+        return (
+            f"<RoutineStep id={self.id} routine={self.routine_id} "
+            f"order={self.step_order} label={self.step_label!r}>"
+        )
+
+
+class RoutineCompletion(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Immutable completion record separated from mutable routine definitions.
+
+    Preserves a snapshot of the routine version, completed steps, UTC timestamp,
+    and localized calendar date in the user's configured timezone so editing a
+    routine never erases or corrupts historical completion logs.
+    """
+
+    __tablename__ = "routine_completions"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owning user identifier",
+    )
+    routine_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("routines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Routine reference (SET NULL on routine deletion to preserve history)",
+    )
+    routine_name_snapshot: Mapped[str] = mapped_column(
+        String(150),
+        nullable=False,
+        comment="Routine name at the time of completion",
+    )
+    routine_version_snapshot: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        comment="Routine version number at the time of completion",
+    )
+    time_of_day_snapshot: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="morning",
+        comment="Routine time-of-day slot at the time of completion",
+    )
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="completed",
+        index=True,
+        comment="Completion status: completed, partial, skipped",
+    )
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        index=True,
+        comment="Timezone-aware UTC timestamp when the routine was completed",
+    )
+    user_timezone: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="UTC",
+        comment="IANA timezone identifier used to compute local_date and local_time",
+    )
+    local_date: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        index=True,
+        comment="Localized calendar date (YYYY-MM-DD) in user_timezone",
+    )
+    local_time: Mapped[str] = mapped_column(
+        String(8),
+        nullable=False,
+        comment="Localized wall-clock time (HH:MM:SS) in user_timezone",
+    )
+    completed_steps_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=list,
+        comment="Immutable snapshot of executed/skipped steps at completion time",
+    )
+    notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Optional user notes for this completion session",
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+        index=True,
+        comment="Optional client idempotency key to prevent duplicate completion logs",
+    )
+
+    __table_args__ = (
+        Index("ix_routine_completions_user_routine_at", "user_id", "routine_id", "completed_at"),
+        Index("ix_routine_completions_user_local_date", "user_id", "local_date"),
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="routine_completions")
+    routine: Mapped["Routine | None"] = relationship("Routine", back_populates="completions")
+
+    def __repr__(self) -> str:
+        return (
+            f"<RoutineCompletion id={self.id} routine={self.routine_id} "
+            f"status={self.status} local_date={self.local_date}>"
+        )
+
+
+class ReminderPreference(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """User-controlled reminder scheduling, quiet hours, timezone, and opt-out settings."""
+
+    __tablename__ = "reminder_preferences"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+        comment="Owning user identifier (1:1)",
+    )
+    reminders_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        index=True,
+        comment="Master opt-in/opt-out toggle; when False, all reminders are suppressed",
+    )
+    preferred_channels: Mapped[list[str]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=lambda: ["in_app"],
+        comment="Enabled delivery channels: in_app, email, push",
+    )
+    morning_reminder_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment="Whether morning routine reminders are enabled",
+    )
+    morning_reminder_time: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="08:00",
+        comment="24h local time (HH:MM) for morning reminders",
+    )
+    evening_reminder_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment="Whether evening routine reminders are enabled",
+    )
+    evening_reminder_time: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="21:00",
+        comment="24h local time (HH:MM) for evening reminders",
+    )
+    quiet_hours_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment="Whether reminders are suppressed during quiet hours in user's timezone",
+    )
+    quiet_hours_start: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="22:30",
+        comment="24h local start time (HH:MM) for quiet hours",
+    )
+    quiet_hours_end: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="07:00",
+        comment="24h local end time (HH:MM) for quiet hours",
+    )
+    timezone_override: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Optional IANA timezone override (falls back to UserProfile.timezone)",
+    )
+    opted_out_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="UTC timestamp when the user most recently disabled reminders",
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="reminder_preference")
+
+    def __repr__(self) -> str:
+        return (
+            f"<ReminderPreference id={self.id} user={self.user_id} "
+            f"enabled={self.reminders_enabled}>"
+        )
+
+
+class ReminderDeliveryRecord(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Idempotency and audit record for routine reminder evaluation and delivery."""
+
+    __tablename__ = "reminder_deliveries"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Target user identifier",
+    )
+    routine_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("routines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional associated routine identifier",
+    )
+    idempotency_key: Mapped[str] = mapped_column(
+        String(150),
+        nullable=False,
+        index=True,
+        comment="Deduplication key preventing duplicate reminder sends",
+    )
+    channel: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="in_app",
+        comment="Notification channel: in_app, email, push",
+    )
+    provider: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="Notification provider adapter name (e.g. local_test_recorder)",
+    )
+    is_simulated: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment="True when recorded by local test adapter without external transmission",
+    )
+    actual_external_delivery: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="True only when a verified external email/push provider confirmed delivery",
+    )
+    status: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        index=True,
+        comment=(
+            "Outcome: recorded_local_not_sent, delivered_external, "
+            "suppressed_opt_out, suppressed_quiet_hours, failed"
+        ),
+    )
+    scheduled_for_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        comment="Reference UTC timestamp for the reminder evaluation",
+    )
+    user_timezone: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="Effective IANA timezone of the user at evaluation time",
+    )
+    user_local_time: Mapped[str] = mapped_column(
+        String(25),
+        nullable=False,
+        comment="Formatted local date-time (YYYY-MM-DD HH:MM:SS) in user_timezone",
+    )
+    failure_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Error or suppression details when delivery did not occur",
+    )
+    payload_summary: Mapped[dict[str, Any]] = mapped_column(
+        JsonType,
+        nullable=False,
+        default=dict,
+        comment="Recorded title, body, and metadata summary",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "idempotency_key",
+            name="uq_reminder_deliveries_user_idempotency",
+        ),
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="reminder_deliveries")
+    routine: Mapped["Routine | None"] = relationship("Routine")
+
+    def __repr__(self) -> str:
+        return (
+            f"<ReminderDeliveryRecord id={self.id} user={self.user_id} "
+            f"key={self.idempotency_key!r} status={self.status}>"
         )

@@ -13,12 +13,14 @@ import io
 import logging
 import re
 import uuid
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, undefer
 
 from app.core.config import get_settings
 from app.core.errors import NotFoundError, ValidationError
@@ -42,6 +44,7 @@ from app.providers.storage import BaseStorageProvider, get_storage_provider
 from app.schemas.ocr import (
     ConfirmIngredientItem,
     ConfirmScanResponse,
+    MediaAssetDeleteResponse,
     MediaAssetResponse,
     OCRCandidateIngredientResponse,
     OCRScanResponse,
@@ -66,8 +69,10 @@ class OCRService:
         db: AsyncSession,
         storage_provider: BaseStorageProvider | None = None,
         ocr_adapter: BaseOCRAdapter | None = None,
+        settings: Any | None = None,
     ) -> None:
         self._db = db
+        self._settings = settings or get_settings()
         self._storage = storage_provider or get_storage_provider()
         self._ocr = ocr_adapter or get_ocr_adapter()
 
@@ -76,10 +81,11 @@ class OCRService:
         user: User,
         file_bytes: bytes,
         original_filename: str | None,
-        _declared_content_type: str | None = None,
+        declared_content_type: str | None = None,
     ) -> MediaAsset:
         """Validate image content, dimensions, and persist to private storage."""
-        settings = get_settings()
+        _ = declared_content_type
+        settings = self._settings
 
         # 1. Size constraint
         if len(file_bytes) == 0:
@@ -119,13 +125,14 @@ class OCRService:
         max_dim = settings.UPLOAD_MAX_IMAGE_DIMENSION
         if width and height and (width > max_dim or height > max_dim):
             raise ValidationError(
-                f"Image dimensions ({width}x{height}) exceed maximum allowed ({max_dim}px)."
+                f"Image dimensions ({width}x{height}) "
+                f"exceed maximum allowed dimension ({max_dim}px)."
             )
 
         # 3. Compute SHA256
         sha256_hash = hashlib.sha256(file_bytes).hexdigest()
 
-        # 4. Generate random unguessable storage key
+        # 4. Generate random unguessable storage key (never use client filename as identifier)
         ext = (
             "jpg"
             if verified_mime == "image/jpeg"
@@ -133,8 +140,16 @@ class OCRService:
         )
         storage_key = f"media/{user.id}/{uuid.uuid4().hex}.{ext}"
 
-        # 5. Persist bytes to private storage
+        # 5. Persist bytes (PostgreSQL BYTEA by default for MVP, or local filesystem if configured)
         await self._storage.store_object(storage_key, file_bytes, verified_mime)
+
+        now = datetime.now(UTC)
+        retention_days = max(1, settings.OCR_IMAGE_RETENTION_DAYS)
+        retention_policy = (
+            "delete_after_ocr"
+            if settings.OCR_IMAGE_RETENTION_POLICY == "delete_after_ocr"
+            else f"ocr_retain_{retention_days}d"
+        )
 
         asset = MediaAsset(
             user_id=user.id,
@@ -146,6 +161,10 @@ class OCRService:
             image_width=width,
             image_height=height,
             sha256_hash=sha256_hash,
+            image_bytes=file_bytes if self._storage.name == "postgres" else None,
+            retention_policy=retention_policy,
+            retention_expires_at=now + timedelta(days=retention_days),
+            is_deleted=False,
         )
         self._db.add(asset)
         await self._db.flush()
@@ -196,6 +215,13 @@ class OCRService:
 
             # Segment candidate ingredients
             await self._segment_and_link_candidates(job, ocr_result.raw_text)
+
+            # Delete temporary image bytes after OCR if configured by retention policy
+            if self._settings.OCR_IMAGE_RETENTION_POLICY == "delete_after_ocr":
+                await self._storage.delete_object(media_asset.storage_key)
+                media_asset.image_bytes = None
+                media_asset.is_deleted = True
+                media_asset.deleted_at = datetime.now(UTC)
 
         except OCRRateLimitError as rle:
             logger.warning("OCR scan rate limit hit: %s", rle)
@@ -354,12 +380,96 @@ class OCRService:
             self._db.add(cand)
             position += 1
 
+    async def retrieve_owned_asset_bytes(
+        self,
+        asset_id: UUID,
+        user_id: UUID,
+    ) -> tuple[bytes, str]:
+        """Retrieve raw image bytes for an authenticated owner (strict 404 if unowned/deleted)."""
+        stmt = (
+            select(MediaAsset)
+            .where(MediaAsset.id == asset_id, MediaAsset.user_id == user_id)
+            .options(undefer(MediaAsset.image_bytes))
+        )
+        asset = (await self._db.execute(stmt)).scalar_one_or_none()
+        if asset is None or asset.is_deleted:
+            raise NotFoundError(f"Media asset '{asset_id}' was not found.")
+
+        if asset.storage_provider == "postgres":
+            if not asset.image_bytes:
+                raise NotFoundError(f"Media asset '{asset_id}' image bytes have been purged.")
+            return asset.image_bytes, asset.content_type
+
+        data = await self._storage.retrieve_object(asset.storage_key)
+        return data, asset.content_type
+
+    async def retrieve_asset_by_storage_key(
+        self,
+        storage_key: str,
+    ) -> tuple[bytes, str]:
+        """Retrieve raw image bytes by storage_key after HMAC token verification."""
+        stmt = (
+            select(MediaAsset)
+            .where(MediaAsset.storage_key == storage_key)
+            .options(undefer(MediaAsset.image_bytes))
+        )
+        asset = (await self._db.execute(stmt)).scalar_one_or_none()
+        if asset is not None:
+            if asset.is_deleted:
+                raise FileNotFoundError(f"Asset '{storage_key}' has been deleted.")
+            if asset.storage_provider == "postgres":
+                if not asset.image_bytes:
+                    raise FileNotFoundError(f"Asset '{storage_key}' bytes not found.")
+                return asset.image_bytes, asset.content_type
+            data = await self._storage.retrieve_object(asset.storage_key)
+            return data, asset.content_type
+
+        # Fallback for direct LocalStorageProvider unit tests without a DB row
+        data = await self._storage.retrieve_object(storage_key)
+        ext = storage_key.split(".")[-1].lower() if "." in storage_key else "jpeg"
+        content_type = "image/jpeg"
+        if ext == "png":
+            content_type = "image/png"
+        elif ext == "webp":
+            content_type = "image/webp"
+        return data, content_type
+
+    async def delete_owned_asset(
+        self,
+        asset_id: UUID,
+        user_id: UUID,
+    ) -> MediaAssetDeleteResponse:
+        """Delete raw image bytes for a user-owned MediaAsset (enforces ownership)."""
+        stmt = (
+            select(MediaAsset)
+            .where(MediaAsset.id == asset_id, MediaAsset.user_id == user_id)
+            .options(undefer(MediaAsset.image_bytes))
+        )
+        asset = (await self._db.execute(stmt)).scalar_one_or_none()
+        if asset is None:
+            raise NotFoundError(f"Media asset '{asset_id}' was not found.")
+
+        now = datetime.now(UTC)
+        if not asset.is_deleted:
+            await self._storage.delete_object(asset.storage_key)
+            asset.image_bytes = None
+            asset.is_deleted = True
+            asset.deleted_at = now
+            await self._db.commit()
+
+        return MediaAssetDeleteResponse(
+            asset_id=asset.id,
+            status="deleted",
+            deleted_at=asset.deleted_at or now,
+            message="Stored image bytes have been permanently purged from PostgreSQL.",
+        )
+
     def _map_to_scan_response(self, job: OCRJob) -> OCRScanResponse:
-        """Map OCRJob model to Pydantic OCRScanResponse."""
+        """Map OCRJob model to Pydantic OCRScanResponse (never returns raw image bytes)."""
         asset = job.media_asset
         view_url = (
             self._storage.generate_signed_url(asset.storage_key, expires_in_seconds=600)
-            if asset
+            if (asset and not asset.is_deleted)
             else None
         )
 
@@ -372,6 +482,10 @@ class OCRService:
             image_width=asset.image_width,
             image_height=asset.image_height,
             sha256_hash=asset.sha256_hash,
+            retention_policy=asset.retention_policy,
+            retention_expires_at=asset.retention_expires_at,
+            is_deleted=asset.is_deleted,
+            deleted_at=asset.deleted_at,
             view_url=view_url,
             created_at=asset.created_at,
         )

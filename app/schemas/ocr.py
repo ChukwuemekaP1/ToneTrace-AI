@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class MediaAssetResponse(BaseModel):
-    """Uploaded image asset metadata."""
+    """Uploaded image asset metadata (never includes raw image bytes)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -19,8 +19,21 @@ class MediaAssetResponse(BaseModel):
     image_width: int | None = None
     image_height: int | None = None
     sha256_hash: str
+    retention_policy: str = "ocr_retain_30d"
+    retention_expires_at: datetime | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
     view_url: str | None = None
     created_at: datetime
+
+
+class MediaAssetDeleteResponse(BaseModel):
+    """Confirmation of private image asset deletion from PostgreSQL BYTEA / storage."""
+
+    asset_id: UUID
+    status: str = "deleted"
+    deleted_at: datetime
+    message: str
 
 
 class OCRCandidateIngredientResponse(BaseModel):

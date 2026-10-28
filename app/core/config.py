@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     ALLOWED_CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
     ]
 
     # --------------------------------------------------------------------------
@@ -112,7 +116,11 @@ class Settings(BaseSettings):
     # 5. Multimodal AI Guidance (Google Gemini)
     # --------------------------------------------------------------------------
     GEMINI_API_KEY: SecretStr | None = None
-    GEMINI_MODEL: str = "gemini-1.5-pro"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_TIMEOUT_SECONDS: float = 20.0
+    GEMINI_MAX_RETRIES: int = 2
+    GEMINI_MAX_CONTEXT_CHARS: int = 16000
+    AI_RATE_LIMIT_PER_MINUTE: int = 10
 
     # --------------------------------------------------------------------------
     # 6. OCR (Ingredient & Product Scanning)
@@ -130,32 +138,52 @@ class Settings(BaseSettings):
     OPEN_BEAUTY_FACTS_BASE_URL: str = "https://world.openbeautyfacts.org/api/v2"
     OPEN_BEAUTY_FACTS_USER_AGENT: str = "ToneTraceAI/0.1.0 (contact: admin@tonetrace.app)"
     CHANNEL3_API_KEY: SecretStr | None = None
-    CHANNEL3_BASE_URL: str = "https://api.trychannel3.com/v1"
+    CHANNEL3_BASE_URL: str = "https://api.trychannel3.com"
 
     # --------------------------------------------------------------------------
-    # 8. Skin Analysis Engine
+    # 7b. Scientific Evidence & Regulatory Sources (PubMed & EC CosIng)
     # --------------------------------------------------------------------------
+    PUBMED_BASE_URL: str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+    PUBMED_API_KEY: SecretStr | None = None
+    PUBMED_TOOL_NAME: str = "tonetrace_ai"
+    PUBMED_CONTACT_EMAIL: str = "dev@tonetrace.ai"
+    COSING_API_URL: str = "https://api.tech.ec.europa.eu/search-api/prod/rest/search"
+    COSING_API_KEY: SecretStr = SecretStr("285a77fd-1257-4271-8507-f0c6b2961203")
+    EVIDENCE_CACHE_TTL_HOURS: int = 168
+
+    # --------------------------------------------------------------------------
+    # 8. Skin Analysis Engine (Perfect Corp / YouCam S2S API)
+    # --------------------------------------------------------------------------
+    SKIN_ANALYSIS_PROVIDER: Literal["youcam", "mock"] = "mock"
     SKIN_ANALYSIS_API_KEY: SecretStr | None = None
+    SKIN_ANALYSIS_SECRET_KEY: SecretStr | None = None
+    SKIN_ANALYSIS_BASE_URL: str = "https://yce-api-01.makeupar.com"
     SKIN_ANALYSIS_ENDPOINT_URL: str | None = None
+    SKIN_ANALYSIS_TIMEOUT_SECONDS: float = 20.0
+    SKIN_ANALYSIS_RETENTION_DAYS: int = 90
 
     # --------------------------------------------------------------------------
-    # 9. Cloud Object Storage
+    # 9. Object Storage & Image Retention Policy (Neon Bucket / S3 / PostgreSQL)
     # --------------------------------------------------------------------------
-    STORAGE_PROVIDER: Literal["s3", "gcs", "local"] = "local"
+    # Supports Neon S3-compatible Object Storage ('s3'), PostgreSQL BYTEA ('postgres'), or 'local'.
+    STORAGE_PROVIDER: Literal["s3", "postgres", "local"] = "postgres"
     STORAGE_LOCAL_DIR: str = "local_data/storage"
     STORAGE_SIGNING_SECRET: SecretStr = SecretStr(
         "tonetrace-storage-signing-secret-change-in-prod-12345"
     )
-    STORAGE_BUCKET_NAME: str | None = None
-    STORAGE_REGION: str = "us-east-1"
+    STORAGE_BUCKET_NAME: str = "assets"
     STORAGE_ENDPOINT_URL: str | None = None
+    STORAGE_REGION: str = "us-east-1"
     STORAGE_ACCESS_KEY: SecretStr | None = None
     STORAGE_SECRET_KEY: SecretStr | None = None
+    STORAGE_FORCE_PATH_STYLE: bool = True  # Mandatory for Neon Object Storage (forcePathStyle)
+    OCR_IMAGE_RETENTION_POLICY: Literal["delete_after_ocr", "retain"] = "retain"
+    OCR_IMAGE_RETENTION_DAYS: int = 30
 
     # --------------------------------------------------------------------------
     # 10. Upload Constraints & Security Limits
     # --------------------------------------------------------------------------
-    UPLOAD_MAX_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB default
+    UPLOAD_MAX_FILE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB default for PostgreSQL BYTEA MVP
     UPLOAD_MAX_IMAGE_DIMENSION: int = 4096
     UPLOAD_ALLOWED_MIME_TYPES: list[str] = [
         "image/jpeg",
@@ -237,6 +265,10 @@ class Settings(BaseSettings):
 
         # 3. CORS Wildcard check
         if is_production:
+            if self.DEBUG:
+                raise ValueError(
+                    "CRITICAL SECURITY VIOLATION: DEBUG mode cannot be enabled in production."
+                )
             if "*" in self.ALLOWED_CORS_ORIGINS:
                 raise ValueError(
                     "CRITICAL SECURITY VIOLATION: Wildcard '*' in ALLOWED_CORS_ORIGINS is "
@@ -248,6 +280,28 @@ class Settings(BaseSettings):
                 )
 
         return self
+
+    def audit_production_readiness(self) -> list[str]:
+        """Return a list of deployment readiness warnings or blockers for production."""
+        findings: list[str] = []
+        raw_storage_secret = self.STORAGE_SIGNING_SECRET.get_secret_value().strip()
+        if "change-in-prod" in raw_storage_secret or len(raw_storage_secret) < 32:
+            findings.append(
+                "STORAGE_SIGNING_SECRET is using the default development value or is < 32 chars."
+            )
+        if not self.AUTH_RATE_LIMIT_ENABLED:
+            findings.append("AUTH_RATE_LIMIT_ENABLED is False; rate limiting must be enabled.")
+        if self.ELASTICSEARCH_ENABLED and self.ELASTICSEARCH_URL.startswith("http://"):
+            findings.append(
+                "ELASTICSEARCH_URL uses unencrypted 'http://'; production requires 'https://'."
+            )
+        if self.OCR_PROVIDER == "mock":
+            findings.append("OCR_PROVIDER is set to 'mock'; configure a verified OCR provider.")
+        if self.SKIN_ANALYSIS_PROVIDER == "mock":
+            findings.append(
+                "SKIN_ANALYSIS_PROVIDER is set to 'mock'; configure verified YouCam credentials."
+            )
+        return findings
 
     @property
     def is_production(self) -> bool:

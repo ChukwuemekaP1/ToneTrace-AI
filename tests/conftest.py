@@ -16,9 +16,24 @@ os.environ["ALLOW_DEV_AUTH_BYPASS"] = "false"
 os.environ["OCR_PROVIDER"] = "mock"
 
 from app.core.config import Settings, get_settings
+from app.core.security import (
+    ai_explanation_rate_limiter,
+    auth_rate_limiter,
+    heavy_scan_rate_limiter,
+    ingest_rate_limiter,
+)
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiters() -> None:
+    """Reset in-memory rate limiters before each test function."""
+    auth_rate_limiter.reset()
+    ingest_rate_limiter.reset()
+    ai_explanation_rate_limiter.reset()
+    heavy_scan_rate_limiter.reset()
 
 
 @pytest.fixture(scope="session")
@@ -42,7 +57,7 @@ def test_settings() -> Settings:
         PASSWORD_MIN_LENGTH=8,
         AUTH_RATE_LIMIT_ENABLED=True,
         OCR_PROVIDER="mock",
-        STORAGE_PROVIDER="local",
+        STORAGE_PROVIDER="postgres",
         STORAGE_LOCAL_DIR="./var/test_storage",
     )
     get_settings.cache_clear()

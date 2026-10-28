@@ -13,12 +13,19 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_current_active_user, rate_limit_ingest
+from app.core.security import (
+    get_current_active_user,
+    rate_limit_ingest,
+    validate_safe_external_url,
+)
+from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.catalog import (
+    Channel3SearchResponse,
+    Channel3SyncOffersResponse,
     IngestProductResponse,
     IngredientDetailResponse,
     ProductDetailResponse,
@@ -54,6 +61,37 @@ class AddOfferRequest(BaseModel):
     offer_url: str | None = Field(None, description="Direct product purchase link")
     is_in_stock: bool = Field(True, description="Stock availability")
     variant_id: UUID | None = Field(None, description="Variant association if SKU specific")
+
+    @field_validator("offer_url")
+    @classmethod
+    def validate_offer_url(cls, v: str | None) -> str | None:
+        return validate_safe_external_url(v)
+
+
+@router.get(
+    "/products/channel3/search",
+    response_model=ResponseEnvelope[Channel3SearchResponse],
+    summary="Search Channel3 universal product catalog and offers",
+    dependencies=[Depends(rate_limit_ingest)],
+)
+async def search_channel3_products(
+    query: Annotated[str, Query(min_length=1, max_length=200, description="Search query")],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    limit: Annotated[int, Query(ge=1, le=30, description="Max products to return")] = 10,
+    max_price: Annotated[
+        float | None, Query(ge=0.0, description="Optional maximum price filter")
+    ] = None,
+) -> ResponseEnvelope[Channel3SearchResponse]:
+    """Authenticated search against the Channel3 v1 product & merchant offer catalog."""
+    service = CatalogService(db)
+    result = await service.search_channel3_catalog(
+        query=query,
+        limit=limit,
+        max_price=max_price,
+        user_id=str(current_user.id),
+    )
+    return ResponseEnvelope(data=result)
 
 
 @router.get(
@@ -186,5 +224,26 @@ async def add_offer(
         offer_url=payload.offer_url,
         is_in_stock=payload.is_in_stock,
         variant_id=payload.variant_id,
+    )
+    return ResponseEnvelope(data=result)
+
+
+@router.post(
+    "/products/{product_id}/offers/sync-channel3",
+    response_model=ResponseEnvelope[Channel3SyncOffersResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Sync live merchant offers from Channel3 for a product",
+    dependencies=[Depends(rate_limit_ingest)],
+)
+async def sync_product_channel3_offers(
+    product_id: UUID,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ResponseEnvelope[Channel3SyncOffersResponse]:
+    """Authenticated endpoint to fetch live Channel3 merchant offers and store in minor units."""
+    service = CatalogService(db)
+    result = await service.sync_channel3_offers_for_product(
+        product_id=product_id,
+        user_id=str(current_user.id),
     )
     return ResponseEnvelope(data=result)

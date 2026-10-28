@@ -16,6 +16,14 @@ env/
 .env
 .env.*
 !.env.example
+node_modules/
+**/node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
 
 # Testing and coverage
 .pytest_cache/
@@ -23,6 +31,8 @@ env/
 htmlcov/
 .ruff_cache/
 .mypy_cache/
+test-results/
+coverage/
 
 # Local databases and service data directories
 data/
@@ -43,4 +53,7 @@ Thumbs.db
 # Build artifacts
 build/
 dist/
+**/dist/
+*.tsbuildinfo
+.vite/
 *.egg-info/

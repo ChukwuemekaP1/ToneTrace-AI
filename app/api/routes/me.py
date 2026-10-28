@@ -177,3 +177,18 @@ async def update_my_consent(
         audit_metadata=audit_metadata,
     )
     return ResponseEnvelope(data=UserConsentResponse.model_validate(consent))
+
+
+@router.delete(
+    "",
+    response_model=ResponseEnvelope[dict[str, Any]],
+    summary="Delete the authenticated user account and purge all private stored media",
+)
+async def delete_my_account(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ResponseEnvelope[dict[str, Any]]:
+    """Permanently delete the caller's account, sessions, health logs, and stored media."""
+    service = ProfileService(db)
+    result = await service.delete_user_account(current_user)
+    return ResponseEnvelope(data=result)

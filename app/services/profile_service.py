@@ -6,16 +6,21 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.errors import ConflictError, NotFoundError
 from app.db.models import (
+    MediaAsset,
+    ScanMedia,
     SkinProfile,
+    SystemAuditLog,
     User,
     UserConsent,
     UserPreference,
     UserProfile,
     UserSensitivity,
 )
+from app.providers.storage import get_storage_provider
 from app.schemas.auth import UserResponse
 from app.schemas.consent import UserConsentUpdateRequest
 from app.schemas.profile import (
@@ -218,6 +223,68 @@ class ProfileService(BaseService):
                 consent.revoked_at = now
             consent.audit_metadata = audit_metadata
 
+        # If skin_data_processing consent is revoked, immediately purge retained scan photos
+        if normalized_purpose == "skin_data_processing" and not payload.is_granted:
+            storage = get_storage_provider()
+            media_stmt = (
+                select(ScanMedia)
+                .where(
+                    ScanMedia.user_id == user_id,
+                    ScanMedia.is_deleted.is_(False),
+                )
+                .options(selectinload(ScanMedia.media_asset))
+            )
+            scan_media_rows = list((await self.db.execute(media_stmt)).scalars().all())
+            for sm in scan_media_rows:
+                await storage.delete_object(sm.storage_key)
+                sm.is_deleted = True
+                sm.deleted_at = now
+                if sm.media_asset is not None:
+                    sm.media_asset.image_bytes = None
+                    sm.media_asset.is_deleted = True
+                    sm.media_asset.deleted_at = now
+
         await self.db.commit()
         await self.db.refresh(consent)
         return consent
+
+    async def delete_user_account(self, user: User) -> dict[str, Any]:
+        """Purge all private stored media objects and delete the user account with cascade."""
+        storage = get_storage_provider()
+        user_id = user.id
+        purged_media_count = 0
+
+        # 1. Purge OCR / label media assets from private object storage
+        ocr_media_stmt = select(MediaAsset).where(MediaAsset.user_id == user_id)
+        for asset in (await self.db.execute(ocr_media_stmt)).scalars().all():
+            await storage.delete_object(asset.storage_key)
+            purged_media_count += 1
+
+        # 2. Purge facial scan media from private object storage
+        scan_media_stmt = select(ScanMedia).where(ScanMedia.user_id == user_id)
+        for sm in (await self.db.execute(scan_media_stmt)).scalars().all():
+            if not sm.is_deleted:
+                await storage.delete_object(sm.storage_key)
+                purged_media_count += 1
+
+        # 3. Record sanitized audit log before deleting user
+        self.db.add(
+            SystemAuditLog(
+                event_name="user_account_deleted",
+                source="privacy",
+                details=(
+                    f"User account {user_id} deleted; purged {purged_media_count} "
+                    "private storage objects."
+                ),
+            )
+        )
+
+        # 4. Delete user (cascades across sessions, profiles, scans, shelf, routines, reactions)
+        await self.db.delete(user)
+        await self.db.commit()
+
+        return {
+            "status": "account_deleted",
+            "user_id": str(user_id),
+            "purged_storage_objects": purged_media_count,
+        }

@@ -43,8 +43,9 @@ COPY app /app/app
 COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
 
-# Secure ownership
-RUN chown -R appuser:appgroup /app
+# Pre-create local storage directory and secure ownership for non-root appuser
+RUN mkdir -p /app/local_data/storage && \
+    chown -R appuser:appgroup /app
 
 USER appuser
 

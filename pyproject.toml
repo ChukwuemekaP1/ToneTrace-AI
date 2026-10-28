@@ -27,6 +27,8 @@ dependencies = [
     "elasticsearch>=8.15.0,<9.0.0",
     "pillow>=13.0.0",
     "python-multipart>=0.0.32",
+    "google-genai>=2.33.0",
+    "boto3>=1.43.119",
 ]
 
 [project.optional-dependencies]

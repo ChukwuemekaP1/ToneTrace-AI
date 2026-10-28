@@ -15,7 +15,7 @@ def test_default_settings():
     assert settings.PROJECT_NAME == "ToneTrace AI API"
     assert settings.VERSION == "0.1.0"
     assert settings.ALLOW_DEV_AUTH_BYPASS is False
-    assert settings.UPLOAD_MAX_FILE_SIZE_BYTES == 10 * 1024 * 1024
+    assert settings.UPLOAD_MAX_FILE_SIZE_BYTES == 5 * 1024 * 1024
     assert "image/jpeg" in settings.UPLOAD_ALLOWED_MIME_TYPES
 
 
@@ -54,6 +54,7 @@ def test_production_rejects_wildcard_cors():
     with pytest.raises(ValidationError, match="Wildcard '\\*' in ALLOWED_CORS_ORIGINS"):
         Settings(
             ENVIRONMENT=EnvironmentType.PRODUCTION,
+            DEBUG=False,
             ALLOWED_CORS_ORIGINS=["*"],
             DATABASE_URL="postgresql+psycopg://user:pass@localhost/db",
             AUTH_JWT_SECRET="super-secure-production-jwt-secret-key-32chars!",

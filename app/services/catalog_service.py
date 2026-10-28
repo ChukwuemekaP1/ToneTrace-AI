@@ -17,7 +17,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import (
+    ConflictError,
+    DependencyError,
+    NotFoundError,
+    RateLimitError,
+    ValidationError,
+)
 from app.db.models import (
     Brand,
     DataSource,
@@ -30,11 +36,20 @@ from app.db.models import (
     ProductVariant,
     SearchOutbox,
 )
+from app.providers.channel3 import (
+    Channel3Adapter,
+    Channel3Error,
+    Channel3RateLimitError,
+)
 from app.providers.open_beauty_facts import (
     OpenBeautyFactsAdapter,
 )
 from app.schemas.catalog import (
     BrandResponse,
+    Channel3OfferItem,
+    Channel3ProductItem,
+    Channel3SearchResponse,
+    Channel3SyncOffersResponse,
     DataSourceResponse,
     IngestProductResponse,
     IngredientAliasResponse,
@@ -78,9 +93,11 @@ class CatalogService:
         self,
         db: AsyncSession,
         obf_adapter: OpenBeautyFactsAdapter | None = None,
+        channel3_adapter: Channel3Adapter | None = None,
     ) -> None:
         self._db = db
         self._obf = obf_adapter or OpenBeautyFactsAdapter()
+        self._channel3 = channel3_adapter or Channel3Adapter()
 
     async def get_product(self, product_id: UUID) -> ProductDetailResponse:
         """Fetch product by UUID with brand, variants, formula versions, and offers."""
@@ -561,6 +578,148 @@ class CatalogService:
             formatted_price=format_currency(offer.price_minor_units, offer.currency),
             is_in_stock=offer.is_in_stock,
             retrieved_at=offer.retrieved_at,
+        )
+
+    async def search_channel3_catalog(
+        self,
+        query: str,
+        limit: int = 10,
+        max_price: float | None = None,
+        user_id: str | None = None,
+    ) -> Channel3SearchResponse:
+        """Query Channel3 universal product catalog and map offers in integer minor units."""
+        filters: dict[str, dict[str, float]] | None = None
+        if max_price is not None:
+            filters = {"price": {"max_price": max_price}}
+
+        try:
+            raw_products, next_page_token = await self._channel3.search_products(
+                query=query,
+                limit=limit,
+                filters=filters,
+                user_id=user_id,
+            )
+        except Channel3RateLimitError as exc:
+            raise RateLimitError(str(exc)) from exc
+        except Channel3Error as exc:
+            raise DependencyError(str(exc)) from exc
+        products: list[Channel3ProductItem] = []
+        for p in raw_products:
+            offers = [
+                Channel3OfferItem(
+                    merchant_name=o.merchant_name,
+                    product_name=o.product_name,
+                    price_minor_units=o.price_minor_units,
+                    currency=o.currency,
+                    offer_url=o.offer_url,
+                    is_in_stock=o.is_in_stock,
+                    channel3_product_id=o.channel3_product_id,
+                    compare_at_price_minor_units=o.compare_at_price_minor_units,
+                    condition=o.condition,
+                    max_commission_rate=o.max_commission_rate,
+                    brand_name=o.brand_name,
+                    image_url=o.image_url,
+                )
+                for o in p.offers
+            ]
+            products.append(
+                Channel3ProductItem(
+                    id=p.id,
+                    title=p.title,
+                    description=p.description,
+                    brand_name=p.brand_name,
+                    brand_id=p.brand_id,
+                    category_slug=p.category_slug,
+                    category_title=p.category_title,
+                    image_url=p.image_url,
+                    cleaned_image_url=p.cleaned_image_url,
+                    key_features=p.key_features,
+                    materials=p.materials,
+                    offers=offers,
+                )
+            )
+        return Channel3SearchResponse(
+            query=query,
+            products=products,
+            next_page_token=next_page_token,
+            total_returned=len(products),
+        )
+
+    async def sync_channel3_offers_for_product(
+        self,
+        product_id: UUID,
+        user_id: str | None = None,
+    ) -> Channel3SyncOffersResponse:
+        """Fetch live merchant offers from Channel3 for a product and persist in minor units."""
+        stmt = select(Product).where(Product.id == product_id)
+        res = await self._db.execute(stmt)
+        product = res.scalar_one_or_none()
+        if product is None:
+            raise NotFoundError(f"Product '{product_id}' was not found.")
+
+        search_query = f"{product.brand} {product.name}".strip()
+        try:
+            raw_offers = await self._channel3.search_offers(
+                query=search_query,
+                barcode=product.ean_or_upc,
+                limit=5,
+                user_id=user_id,
+            )
+        except Channel3RateLimitError as exc:
+            raise RateLimitError(str(exc)) from exc
+        except Channel3Error as exc:
+            raise DependencyError(str(exc)) from exc
+
+        # Resolve DataSource for Channel3
+        ds_stmt = select(DataSource).where(DataSource.code == "channel3")
+        ds_res = await self._db.execute(ds_stmt)
+        data_source = ds_res.scalar_one_or_none()
+        if data_source is None:
+            data_source = DataSource(
+                code="channel3",
+                name="Channel3 Universal Product Catalog",
+                attribution_url="https://trychannel3.com",
+                license_or_terms="Channel3 Commercial Product & Offer Catalog API v1",
+            )
+            self._db.add(data_source)
+            await self._db.flush()
+
+        now = datetime.now(UTC)
+        persisted_offers: list[ProductOfferResponse] = []
+
+        for c3_offer in raw_offers:
+            offer = ProductOffer(
+                product_id=product.id,
+                data_source_id=data_source.id,
+                merchant_name=c3_offer.merchant_name[:150],
+                offer_url=c3_offer.offer_url,
+                price_minor_units=c3_offer.price_minor_units,
+                currency=c3_offer.currency.upper()[:3],
+                is_in_stock=c3_offer.is_in_stock,
+                retrieved_at=now,
+            )
+            self._db.add(offer)
+            await self._db.flush()
+            persisted_offers.append(
+                ProductOfferResponse(
+                    id=offer.id,
+                    merchant_name=offer.merchant_name,
+                    offer_url=offer.offer_url,
+                    price_minor_units=offer.price_minor_units,
+                    currency=offer.currency,
+                    formatted_price=format_currency(offer.price_minor_units, offer.currency),
+                    is_in_stock=offer.is_in_stock,
+                    retrieved_at=offer.retrieved_at,
+                )
+            )
+
+        await self._db.commit()
+        return Channel3SyncOffersResponse(
+            product_id=product.id,
+            product_name=product.name,
+            offers_synced=len(persisted_offers),
+            offers=persisted_offers,
+            retrieved_at=now,
         )
 
     def _map_to_product_detail(self, product: Product) -> ProductDetailResponse:

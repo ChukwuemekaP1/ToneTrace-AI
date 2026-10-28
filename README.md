@@ -205,13 +205,40 @@ Apply pending migrations to Neon PostgreSQL:
 alembic upgrade head
 ```
 
-### 4. Running the Application
+### 4. Running the Backend Application
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 - Interactive Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Interactive ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+---
+
+### 5. Running the Frontend Mobile Client
+
+The mobile web frontend is housed in `frontend/` and runs on port 3000 (matching backend CORS configuration).
+
+```bash
+cd frontend
+
+# Copy environment configuration
+cp .env.example .env
+
+# Install dependencies
+pnpm install --ignore-scripts
+
+# Start development server on http://localhost:3000
+pnpm dev
+
+# Run type checking and test suite
+pnpm typecheck
+pnpm test
+```
+
+- **Proxy vs CORS**: By default, Vite proxies `/api` and `/health` requests to `http://localhost:8000`. For direct CORS, set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env`.
+- **Responsive Layout**: Designed for a 390px baseline (iPhone 14/15/16). On wider desktop displays, the interface centers a maximum-430px mobile shell.
+- **Design System Showcase**: Available directly on the **Showcase** tab for visual review of design tokens, buttons, chips, glass cards, inputs, and error fallbacks.
 
 ### 4. Product & Ingredient Catalogue (Phase 4)
 
@@ -257,6 +284,109 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `GET /api/v1/ocr/scans/{scan_id}` — Retrieve scan status, raw text, and candidate ingredients (user-scoped).
 - `POST /api/v1/ocr/scans/{scan_id}/confirm` — Review, edit, and confirm candidate formulation ingredients.
 - `GET /api/v1/ocr/assets/view` — Stream private image asset with valid HMAC signature and expiration timestamp.
+
+### Phase 6: Ingredient Evidence, Research Retrieval & Channel3 Integration
+- **Authoritative Scientific & Regulatory Sources**:
+  - **European Commission CosIng**: Official EC Search REST API (`GROWTH_COSING`) and official CSV inventory parser for INCI nomenclature, CAS/EC numbers, cosmetic functions, and Regulation (EC) No 1223/2009 restrictions.
+  - **NCBI PubMed E-utilities**: Official `esearch.fcgi` and `efetch.fcgi` integration with mandatory `tool` and `email` attribution parameters, rate-limit compliance, study design classification (`rct`, `meta_analysis`, `in_vitro`, etc.), and honest `has_full_text=False` representation.
+- **Strict 4-Way Epistemic Separation**:
+  1. `identity_reference` — Official CosIng ingredient identity, CAS/EC, functions, and EU regulatory restrictions.
+  2. `published_research` — Peer-reviewed PubMed bibliographic records and abstracts (`has_full_text=False`, missing abstracts marked `insufficient`).
+  3. `human_interpretation` — Authored/reviewed dermatological interpretations with provenance and immutable review history (`evidence_review_status`).
+  4. `marketing_claims` — Commercial/brand packaging claims strictly isolated from scientific evidence (`reference_only`).
+- **Channel3 Universal Product Catalog (`channel3-api`)**:
+  - Live integration with `https://api.trychannel3.com/v1` using `CHANNEL3_API_KEY` from `.env`, supporting product search, offer hydration, `x-user-id` attribution, and syncing merchant offers in integer minor currency units.
+
+#### Evidence & Channel3 Endpoints
+- `GET /api/v1/ingredients/{ingredient_id}/evidence` — Cached read-only retrieval with pagination, source/category/review_status/study_type filters, 4-way separated groups, and epistemic guardrails.
+- `POST /api/v1/ingredients/{ingredient_id}/evidence/refresh` — Restricted, rate-limited research retrieval and refresh from EC CosIng and NCBI PubMed with TTL caching and idempotent deduplication.
+- `POST /api/v1/ingredients/{ingredient_id}/evidence` — Authenticated authoring of human-reviewed interpretations or segregated marketing claims.
+- `PATCH /api/v1/ingredients/{ingredient_id}/evidence/{evidence_id}/review` — Authenticated review status transition (`verified`, `disputed`, `conflicting_flagged`, `incorrect_match_flagged`, `rejected`) with audit trail.
+- `GET /api/v1/products/channel3/search` — Authenticated live product and offer search against the Channel3 v1 universal catalog.
+- `POST /api/v1/products/{product_id}/offers/sync-channel3` — Authenticated sync of live Channel3 merchant offers for a catalog product.
+
+### Phase 7: Gemini-Powered Grounded Explanations
+- **Replaceable Language-Model Interface (`LLMExplanationProvider`)**:
+  - Backed by the official Google GenAI SDK (`google-genai` >= 2.30.1) using the Interactions API (`client.aio.interactions.create`) with `store=False` and structured JSON output (`response_format`).
+  - Configured via `GEMINI_API_KEY` and `GEMINI_MODEL` (default `gemini-3.5-flash-lite`; also supports `gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.1-flash-lite`, `gemma-4-31b-it`). Explicitly rejects deprecated legacy models (`gemini-1.5-*`, `gemini-2.0-*`, `gemini-2.5-*`).
+- **7-Step Grounding & Verification Pipeline (`ExplanationService`)**:
+  1. Validates schema-versioned request (`schema_version="1.0"`) and scans for red-flag medical symptoms requiring professional dermatologist escalation.
+  2. Retrieves authoritative products, ingredients, OCR scan candidates, and auditable evidence from PostgreSQL and Elasticsearch.
+  3. Builds a compact, bounded context (`GEMINI_MAX_CONTEXT_CHARS`) with deterministic source IDs (`prod:...`, `ing:...`, `ev:...`, `res:...`, `offer:...`, `ocr:...`) and isolates untrusted product descriptions/OCR text inside sanitized `<untrusted_data>` tags.
+  4. Requests a structured JSON explanation (`GeminiStructuredExplanationPayload`) from Gemini.
+  5. Validates the structured JSON payload.
+  6. Verifies that every cited source ID belongs to the retrieved context and checks that the output does not invent ingredient concentrations (`%`), invent prices, or assert medical diagnoses.
+  7. Rejects unsupported citations or ungrounded claims and returns a deterministic safe fallback synthesized strictly from retrieved records.
+
+#### AI Explanation Endpoint
+- `POST /api/v1/ai/explanations` — Authenticated, per-user rate-limited endpoint returning grounded findings, resolved `source_references`, `uncertainty_and_limitations`, non-diagnostic `safety_notice`, and `generation_metadata`.
+
+### Phase 8: Skin Analysis & Longitudinal Skin Story
+- **Replaceable Skin-Analysis Provider Interface (`BaseSkinAnalysisProvider`)**:
+  - **YouCam S2S v2.0 Adapter (`YouCamSkinAnalysisAdapter`)**: Verified integration with the Perfect Corp / YouCam S2S v2.0 API (`POST /s2s/v2.0/file/skin-analysis` -> pre-signed S3 PUT upload -> `POST /s2s/v2.0/task/skin-analysis` -> `GET /s2s/v2.0/task/skin-analysis/{task_id}`).
+  - **Deterministic Mock Adapter (`MockSkinAnalysisAdapter`)**: Offline-safe, deterministic adapter for local development and automated tests. Never fabricates a successful scan when an external provider is unavailable or times out.
+- **Privacy, Consent, Storage & Retention**:
+  - Requires explicit, unrevoked user consent (`skin_data_processing` or `facial_scan_processing` in `user_consents`) before accepting or processing any facial photo.
+  - Stores facial photos strictly in private object storage (`scan_media` + `media_assets`), never in PostgreSQL, with configurable retention expiration (`SKIN_ANALYSIS_RETENTION_DAYS`) and user-initiated deletion (`DELETE /api/v1/skin/scans/{scan_id}`).
+  - Normalized observations (`skin_observations`) are persisted with metric code, raw value, display value, unit, directionality, provider/model version, and interpretation version (`tonetrace-obs-v1.0`), without retaining restricted raw provider payloads (`raw_payload_retained=False`).
+- **Longitudinal Skin Story & Journal (`SkinStoryResponse`)**:
+  - Compares historical observations only when `metric_code`, `unit`, `provider_name`, `provider_model_version`, and `interpretation_version` match the baseline, explicitly disclosing any version or provider incompatibility.
+  - Uses strictly non-clinical framing (`visual_metric_increase`, `visual_metric_decrease`, `visual_metric_stable`), never infers the biological cause of pigmentation or diagnoses a skin condition, and explains how lighting, camera, angle, and cosmetics affect visual measurements.
+
+#### Skin Analysis & Skin Story Endpoints
+- `POST /api/v1/skin/scans` — Submit a facial photo with capture conditions and optional `idempotency_key`.
+- `GET /api/v1/skin/scans` — List authenticated user's skin scans.
+- `GET /api/v1/skin/scans/{scan_id}` — Retrieve a single scan and its normalized observations (supports `?poll_if_processing=true`).
+- `POST /api/v1/skin/scans/{scan_id}/poll` — Poll an asynchronous provider task in `processing` state.
+- `DELETE /api/v1/skin/scans/{scan_id}` — Purge private stored scan photos and delete scan observations.
+- `GET /api/v1/skin/story` — Retrieve longitudinal, compatibility-checked metric timelines and recent journal entries.
+- `POST /api/v1/skin/journal` — Record a user-authored longitudinal skin observation and routine entry.
+- `GET /api/v1/skin/journal` — List user-authored skin story journal entries.
+
+### Phase 9: My Shelf & Product Discovery
+- **Personal Product Shelf (`user_products` & `product_reactions`)**:
+  - Supports both public catalogue-linked products (`product_id`) and custom user-defined products (`is_custom=True`) not present in the public catalogue.
+  - Tracks status (`in_use`, `wishlist`, `finished`, `paused`, `discontinued`, `avoided`), `opened_at`, `expires_at`, strictly private notes (`is_public=False`), sensitivity alerts against `user_sensitivities`, and personal reaction/tolerance history (`product_reactions`).
+  - Gracefully handles unavailable or removed catalogue records (`catalogue_status="catalogue_unavailable"`).
+- **Product Discovery & Explainable Rule Engine (`tonetrace-discovery-rules-v1.0`)**:
+  - Uses Elasticsearch for free-text search when enabled, honours the documented fallback policy (`ELASTICSEARCH_FALLBACK_TO_DB`), and hydrates canonical product, ingredient, evidence, and commercial offer records from PostgreSQL.
+  - Evaluates 5 versioned, traceable rules (`R1_INGREDIENT_DATA_COMPLETENESS`, `R2_SENSITIVITY_AND_REACTION_EXCLUSION`, `R3_GOAL_AND_EVIDENCE_ALIGNMENT`, `R4_SKIN_TYPE_CATEGORY_FIT`, `R5_COMMERCIAL_OFFER_SEGREGATION`).
+  - Never treats missing ingredient data as proof of safety, never claims exact concentrations without evidence, never guarantees pigmentation results, and strictly separates commercial offers from scientific suitability.
+
+#### My Shelf & Discovery Endpoints
+- `GET /api/v1/me/shelf` — List authenticated user's shelf items with pagination, filters, and sorting.
+- `POST /api/v1/me/shelf` — Add a catalogue-linked or custom product to My Shelf.
+- `GET /api/v1/me/shelf/{item_id}` — Retrieve a single user-owned shelf item.
+- `PATCH /api/v1/me/shelf/{item_id}` — Update status, dates, private notes, or log a `ProductReaction`.
+- `DELETE /api/v1/me/shelf/{item_id}` — Remove an item from My Shelf.
+- `GET /api/v1/discovery/products` — Search and evaluate catalogue products with explainable suitability assessments.
+- `GET /api/v1/discovery/products/{product_id}` — Full canonical product detail, rule evaluation trace, and optional grounded Gemini explanation (`?include_ai_explanation=true`).
+
+### Phase 10: Routines, Reminders & Product Reactions
+- **Routine Planning & Immutable Completion History (`routines`, `routine_steps`, `routine_completions`)**:
+  - Ordered routine steps (`step_order`) supporting user shelf products (`user_product_id`), public catalogue products (`product_id`), or custom application instructions (`custom_instruction`), with strict ownership validation.
+  - Editing a routine increments `version` while preserving historical `RoutineCompletion` records (`routine_version_snapshot`, `routine_name_snapshot`, `completed_steps_snapshot`).
+  - Completion timestamps are converted using the user's configured IANA timezone (`local_date`, `local_time`, `user_timezone`).
+- **User-Controlled Reminders & Notification Provider (`reminder_preferences`, `reminder_deliveries`)**:
+  - Replaceable `BaseNotificationProvider` interface (`app/providers/notification.py`) with `LocalRecordingNotificationAdapter` (`is_simulated=True`, `actual_external_delivery=False`, `status="recorded_local_not_sent"`), clearly distinguished from external push/email delivery.
+  - Enforces idempotency keys (`uq_reminder_deliveries_user_idempotency`), opt-outs (`reminders_enabled`), local quiet hours (`quiet_hours_start`..`quiet_hours_end`), and delivery failure capture.
+- **Safety-Aware Product Reactions (`product_reactions`)**:
+  - User-reported observations only (`is_causal_proof=False`, `is_medical_diagnosis=False`).
+  - Automatically surfaces urgent-care guidance (`requires_urgent_care_guidance=True`) and suspends ordinary cosmetic recommendations (`ordinary_recommendations_suspended=True`) when a severe or rapidly worsening reaction is reported.
+
+#### Routines, Reminders & Reactions Endpoints
+- `GET /api/v1/me/routines` — List user routines with ordered steps and completion counts.
+- `POST /api/v1/me/routines` — Create a new skincare routine with validated ordered steps.
+- `GET /api/v1/me/routines/{routine_id}` — Retrieve a user-owned routine.
+- `PATCH /api/v1/me/routines/{routine_id}` — Update routine metadata or steps (increments `version` without erasing history).
+- `DELETE /api/v1/me/routines/{routine_id}` — Delete a routine while preserving completion snapshots.
+- `POST /api/v1/me/routines/{routine_id}/completions` — Log a timezone-aware routine completion session.
+- `GET /api/v1/me/routines/{routine_id}/completions` — List historical completions for a routine.
+- `GET /api/v1/me/reminders` — Retrieve user reminder preferences, quiet hours, timezone, and notification adapter info.
+- `PUT /api/v1/me/reminders` — Update reminder schedule, opt-out toggles, quiet hours, and timezone override.
+- `POST /api/v1/me/reminders/dispatch` — Evaluate opt-outs, quiet hours, timezone, and idempotency keys to dispatch a reminder.
+- `POST /api/v1/me/product-reactions` — Record a user-reported product reaction with automatic urgent-care guidance evaluation.
+- `GET /api/v1/me/product-reactions` — List user-reported product reactions with non-diagnostic disclaimers.
 
 ---
 

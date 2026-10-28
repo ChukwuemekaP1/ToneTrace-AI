@@ -148,3 +148,56 @@ class IngestProductResponse(BaseModel):
     product: ProductDetailResponse
     was_created: bool
     source_attribution: str
+
+
+class Channel3OfferItem(BaseModel):
+    """Commercial product offer returned from Channel3 API."""
+
+    merchant_name: str
+    product_name: str
+    price_minor_units: int
+    currency: str
+    offer_url: str | None = None
+    is_in_stock: bool = True
+    channel3_product_id: str | None = None
+    compare_at_price_minor_units: int | None = None
+    condition: str | None = "new"
+    max_commission_rate: float | None = None
+    brand_name: str | None = None
+    image_url: str | None = None
+
+
+class Channel3ProductItem(BaseModel):
+    """Product record returned from Channel3 universal catalog search."""
+
+    id: str
+    title: str
+    description: str | None = None
+    brand_name: str | None = None
+    brand_id: str | None = None
+    category_slug: str | None = None
+    category_title: str | None = None
+    image_url: str | None = None
+    cleaned_image_url: str | None = None
+    key_features: list[str] = Field(default_factory=list)
+    materials: list[str] = Field(default_factory=list)
+    offers: list[Channel3OfferItem] = Field(default_factory=list)
+
+
+class Channel3SearchResponse(BaseModel):
+    """Paginated response from Channel3 v1 product search."""
+
+    query: str
+    products: list[Channel3ProductItem] = Field(default_factory=list)
+    next_page_token: str | None = None
+    total_returned: int = 0
+
+
+class Channel3SyncOffersResponse(BaseModel):
+    """Result of syncing live Channel3 merchant offers for a catalog product."""
+
+    product_id: UUID
+    product_name: str
+    offers_synced: int
+    offers: list[ProductOfferResponse] = Field(default_factory=list)
+    retrieved_at: datetime
