@@ -15,7 +15,7 @@ services:
       - key: DEBUG
         value: "false"
       - key: ALLOWED_CORS_ORIGINS
-        value: '["https://tonetrace.vercel.app","https://tonetrace-web.onrender.com"]'
+        value: '["https://tone-trace-ai.vercel.app","https://tonetrace-web.onrender.com","http://localhost:3000"]'
       - key: DATABASE_URL
         fromDatabase:
           name: tonetrace-postgres
