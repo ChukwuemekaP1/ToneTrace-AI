@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     ELASTICSEARCH_INDEX_PREFIX: str = "tonetrace_"
     ELASTICSEARCH_REQUEST_TIMEOUT_SECONDS: float = 10.0
     ELASTICSEARCH_VERIFY_CERTS: bool = True
-    ELASTICSEARCH_FALLBACK_TO_DB: bool = False
+    ELASTICSEARCH_FALLBACK_TO_DB: bool = True
 
     # --------------------------------------------------------------------------
     # 5. Multimodal AI Guidance (Google Gemini)
@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------------------
     # 6. OCR (Ingredient & Product Scanning)
     # --------------------------------------------------------------------------
-    OCR_PROVIDER: Literal["ocr_space", "tesseract", "mock"] = "mock"
+    OCR_PROVIDER: Literal["gemini", "ocr_space", "tesseract", "mock"] = "mock"
     OCR_API_KEY: SecretStr | None = None
     OCR_BASE_URL: str = "https://api.ocr.space/parse/image"
     TESSERACT_CMD_PATH: str | None = None

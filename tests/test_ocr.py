@@ -27,6 +27,7 @@ from app.providers.ocr.base import (
     OCRRateLimitError,
     OCRUnavailableError,
 )
+from app.providers.ocr.gemini import GeminiOCRAdapter
 from app.providers.ocr.mock import MockOCRAdapter
 from app.providers.ocr.ocr_space import OCRSpaceAdapter
 from app.providers.ocr.tesseract import LocalTesseractOCRAdapter
@@ -245,6 +246,66 @@ async def test_ocr_space_adapter_processing_error(monkeypatch):
     adapter = OCRSpaceAdapter(api_key="test-api-key")
     with pytest.raises(OCRExtractionError):
         await adapter.extract_text(b"img-bytes", "image/jpeg")
+
+
+@pytest.mark.asyncio
+async def test_gemini_ocr_adapter_success():
+    """Verify GeminiOCRAdapter calls generate_content and parses text."""
+    class FakeResponse:
+        text = "Aqua, Glycerin, Ceramide NP, Niacinamide"
+
+    class FakeModelsAsync:
+        async def generate_content(self, *args, **kwargs):
+            return FakeResponse()
+
+    class FakeAio:
+        models = FakeModelsAsync()
+
+    class FakeClient:
+        aio = FakeAio()
+
+    adapter = GeminiOCRAdapter(api_key="fake-gemini-key", genai_client=FakeClient())
+    assert adapter.name == "gemini"
+    assert adapter.is_configured is True
+
+    result = await adapter.extract_text(b"valid-image-bytes", "image/jpeg")
+    assert result.provider == "gemini"
+    assert "Aqua, Glycerin, Ceramide NP" in result.raw_text
+    assert result.confidence_score == 0.95
+
+
+@pytest.mark.asyncio
+async def test_gemini_ocr_adapter_unconfigured():
+    """Verify GeminiOCRAdapter raises OCRUnavailableError when API key is missing."""
+    adapter = GeminiOCRAdapter(api_key=None)
+    with pytest.raises(OCRUnavailableError, match="not configured"):
+        await adapter.extract_text(b"bytes", "image/jpeg")
+
+
+@pytest.mark.asyncio
+async def test_gemini_ocr_adapter_rate_limit():
+    """Verify GeminiOCRAdapter maps 429/quota to OCRRateLimitError."""
+    class FakeModelsAsync:
+        async def generate_content(self, *args, **kwargs):
+            raise Exception("429 RESOURCE_EXHAUSTED: Quota exceeded for model")
+
+    class FakeAio:
+        models = FakeModelsAsync()
+
+    class FakeClient:
+        aio = FakeAio()
+
+    adapter = GeminiOCRAdapter(api_key="key", genai_client=FakeClient())
+    with pytest.raises(OCRRateLimitError, match="quota or rate limit exceeded"):
+        await adapter.extract_text(b"bytes", "image/jpeg")
+
+
+@pytest.mark.asyncio
+async def test_gemini_ocr_adapter_empty_image():
+    """Verify GeminiOCRAdapter raises OCRExtractionError on empty image bytes."""
+    adapter = GeminiOCRAdapter(api_key="key")
+    with pytest.raises(OCRExtractionError, match="Empty image bytes"):
+        await adapter.extract_text(b"", "image/jpeg")
 
 
 # ==============================================================================

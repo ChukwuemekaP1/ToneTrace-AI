@@ -24,6 +24,8 @@ services:
         generateValue: true
       - key: ELASTICSEARCH_ENABLED
         value: "false"
+      - key: ELASTICSEARCH_FALLBACK_TO_DB
+        value: "true"
       - key: ELASTICSEARCH_URL
         sync: false
       - key: ELASTICSEARCH_API_KEY
@@ -31,7 +33,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: OCR_PROVIDER
-        value: ocr_space
+        value: gemini
       - key: OCR_API_KEY
         sync: false
       - key: COSING_API_KEY
