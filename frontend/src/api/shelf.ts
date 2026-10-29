@@ -11,7 +11,6 @@
 
 import { apiClient } from "./client";
 import {
-  ResponseEnvelope,
   ShelfFilterParams,
   ShelfItemCreateRequest,
   ShelfItemResponse,
@@ -55,15 +54,10 @@ export class ShelfService {
     if (params.page) queryParams.page = params.page;
     if (params.page_size) queryParams.page_size = params.page_size;
 
-    const envelope = await apiClient.request<ResponseEnvelope<ShelfListResponse>>(
-      "/me/shelf",
-      {
-        method: "GET",
-        params: queryParams,
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.get<ShelfListResponse>("/api/v1/me/shelf", {
+      params: queryParams,
+      signal,
+    });
   }
 
   /**
@@ -74,14 +68,7 @@ export class ShelfService {
       throw new Error(`Invalid shelf item identifier: '${itemId}'. Expected canonical UUID.`);
     }
 
-    const envelope = await apiClient.request<ResponseEnvelope<ShelfItemResponse>>(
-      `/me/shelf/${itemId}`,
-      {
-        method: "GET",
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.get<ShelfItemResponse>(`/api/v1/me/shelf/${itemId}`, { signal });
   }
 
   /**
@@ -91,15 +78,7 @@ export class ShelfService {
     payload: ShelfItemCreateRequest,
     signal?: AbortSignal
   ): Promise<ShelfItemResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<ShelfItemResponse>>(
-      "/me/shelf",
-      {
-        method: "POST",
-        body: payload,
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.post<ShelfItemResponse>("/api/v1/me/shelf", payload, { signal });
   }
 
   /**
@@ -114,15 +93,9 @@ export class ShelfService {
       throw new Error(`Invalid shelf item identifier: '${itemId}'. Expected canonical UUID.`);
     }
 
-    const envelope = await apiClient.request<ResponseEnvelope<ShelfItemResponse>>(
-      `/me/shelf/${itemId}`,
-      {
-        method: "PATCH",
-        body: payload,
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.patch<ShelfItemResponse>(`/api/v1/me/shelf/${itemId}`, payload, {
+      signal,
+    });
   }
 
   /**
@@ -136,14 +109,10 @@ export class ShelfService {
       throw new Error(`Invalid shelf item identifier: '${itemId}'. Expected canonical UUID.`);
     }
 
-    const envelope = await apiClient.request<ResponseEnvelope<{ message: string; deleted_id: string }>>(
-      `/me/shelf/${itemId}`,
-      {
-        method: "DELETE",
-        signal,
-      }
+    return await apiClient.delete<{ message: string; deleted_id: string }>(
+      `/api/v1/me/shelf/${itemId}`,
+      { signal }
     );
-    return envelope.data;
   }
 }
 

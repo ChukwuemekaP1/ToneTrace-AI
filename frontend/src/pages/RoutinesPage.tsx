@@ -270,8 +270,12 @@ export const RoutinesPage: React.FC<RoutinesPageProps> = ({ onNavigate, initialR
     setEditingRoutine(routine);
     setRoutineName(routine.name);
     setRoutineDesc(routine.description || "");
-    setRoutineSlot((routine.time_of_day as any) || "morning");
-    setRoutineFreq((routine.frequency as any) || "daily");
+    setRoutineSlot(
+      (routine.time_of_day as "morning" | "evening" | "midday" | "weekly" | "custom") || "morning"
+    );
+    setRoutineFreq(
+      (routine.frequency as "daily" | "every_other_day" | "weekly" | "custom_days") || "daily"
+    );
     setRoutinePrefTime(routine.preferred_local_time || "08:00");
     setBuilderSteps(
       routine.steps.map((s) => ({
@@ -279,7 +283,7 @@ export const RoutinesPage: React.FC<RoutinesPageProps> = ({ onNavigate, initialR
         user_product_id: s.user_product_id,
         step_label: s.step_label,
         custom_instruction: s.custom_instruction,
-        frequency: (s.frequency as any) || "every_session",
+        frequency: (s.frequency as StepFormItem["frequency"]) || "every_session",
         wait_time_seconds: s.wait_time_seconds,
       }))
     );
@@ -893,7 +897,11 @@ export const RoutinesPage: React.FC<RoutinesPageProps> = ({ onNavigate, initialR
                     id="routine-slot-select"
                     aria-label="Time Slot"
                     value={routineSlot}
-                    onChange={(e) => setRoutineSlot(e.target.value as any)}
+                    onChange={(e) =>
+                      setRoutineSlot(
+                        e.target.value as "morning" | "evening" | "midday" | "weekly" | "custom"
+                      )
+                    }
                     className="w-full text-xs p-2 rounded-xl bg-[#090D11] border border-white/10 text-white focus:outline-none focus:border-emerald-500"
                   >
                     <option value="morning">Morning</option>
@@ -912,7 +920,11 @@ export const RoutinesPage: React.FC<RoutinesPageProps> = ({ onNavigate, initialR
                     id="routine-cadence-select"
                     aria-label="Cadence"
                     value={routineFreq}
-                    onChange={(e) => setRoutineFreq(e.target.value as any)}
+                    onChange={(e) =>
+                      setRoutineFreq(
+                        e.target.value as "daily" | "every_other_day" | "weekly" | "custom_days"
+                      )
+                    }
                     className="w-full text-xs p-2 rounded-xl bg-[#090D11] border border-white/10 text-white focus:outline-none focus:border-emerald-500"
                   >
                     <option value="daily">Daily</option>

@@ -1,0 +1,73 @@
+# ==============================================================================
+# TONETRACE AI — PRODUCTION / SELF-HOSTED DOCKER COMPOSE
+# ==============================================================================
+services:
+  # ----------------------------------------------------------------------------
+  # PostgreSQL 16 (Persistent Database)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: tonetrace-postgres-prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tonetrace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tonetrace_secure_password_replace}
+      POSTGRES_DB: ${POSTGRES_DB:-tonetrace_prod}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pg_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tonetrace -d tonetrace_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # ----------------------------------------------------------------------------
+  # ToneTrace Backend API Application
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tonetrace-api-prod
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DATABASE_URL=postgresql+psycopg://tonetrace:${POSTGRES_PASSWORD:-tonetrace_secure_password_replace}@postgres:5432/tonetrace_prod
+      - ALLOWED_CORS_ORIGINS=["http://localhost","http://localhost:80","http://localhost:3000"]
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OCR_SPACE_API_KEY=${OCR_SPACE_API_KEY}
+      - YOUCAM_API_KEY=${YOUCAM_API_KEY}
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - storage_data:/app/local_data/storage
+    restart: always
+
+  # ----------------------------------------------------------------------------
+  # ToneTrace Frontend (Nginx SPA + Reverse Proxy)
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tonetrace-frontend-prod
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: always
+
+volumes:
+  pg_prod_data:
+    driver: local
+  storage_data:
+    driver: local

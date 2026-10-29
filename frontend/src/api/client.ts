@@ -55,7 +55,16 @@ class ApiClient {
   }
 
   private buildUrl(path: string, params?: RequestOptions["params"]): string {
-    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    let cleanPath = path.startsWith("/") ? path : `/${path}`;
+    // Normalize path to ensure /api/v1 prefix if missing and not a root/health probe
+    if (
+      !cleanPath.startsWith("/api/") &&
+      !cleanPath.startsWith("/health/") &&
+      cleanPath !== "/health" &&
+      cleanPath !== "/"
+    ) {
+      cleanPath = `/api/v1${cleanPath}`;
+    }
     const fullUrl = this.baseUrl ? `${this.baseUrl}${cleanPath}` : cleanPath;
 
     if (!params) return fullUrl;
@@ -105,6 +114,9 @@ class ApiClient {
       if (body instanceof FormData) {
         serializedBody = body;
         // Fetch sets the boundary multipart content-type automatically
+      } else if (typeof body === "string") {
+        headers.set("Content-Type", "application/json");
+        serializedBody = body;
       } else {
         headers.set("Content-Type", "application/json");
         serializedBody = JSON.stringify(body);

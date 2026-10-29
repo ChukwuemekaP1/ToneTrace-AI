@@ -16,7 +16,6 @@ import {
   ConfirmScanResponse,
   MediaAssetDeleteResponse,
   OCRScanResponse,
-  ResponseEnvelope,
   ShelfItemCreateRequest,
   ShelfItemResponse,
 } from "./types";
@@ -80,27 +79,18 @@ export class OCRService {
       formData.append("idempotency_key", idempotencyKey);
     }
 
-    const envelope = await apiClient.request<ResponseEnvelope<OCRScanResponse>>("/ocr/scans", {
-      method: "POST",
-      body: formData,
+    return await apiClient.post<OCRScanResponse>("/api/v1/ocr/scans", formData, {
       signal,
     });
-
-    return envelope.data;
   }
 
   /**
    * Retrieve OCR scan status, raw text, and candidate ingredients.
    */
   public async getScan(scanId: string, signal?: AbortSignal): Promise<OCRScanResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<OCRScanResponse>>(
-      `/ocr/scans/${scanId}`,
-      {
-        method: "GET",
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.get<OCRScanResponse>(`/api/v1/ocr/scans/${scanId}`, {
+      signal,
+    });
   }
 
   /**
@@ -158,27 +148,19 @@ export class OCRService {
     ingredients: ConfirmIngredientItem[]
   ): Promise<ConfirmScanResponse> {
     const payload: ConfirmScanRequest = { ingredients };
-    const envelope = await apiClient.request<ResponseEnvelope<ConfirmScanResponse>>(
-      `/ocr/scans/${scanId}/confirm`,
-      {
-        method: "POST",
-        body: payload,
-      }
+    return await apiClient.post<ConfirmScanResponse>(
+      `/api/v1/ocr/scans/${scanId}/confirm`,
+      payload
     );
-    return envelope.data;
   }
 
   /**
    * Delete owned private image asset bytes from backend storage.
    */
   public async deleteOwnedAsset(assetId: string): Promise<MediaAssetDeleteResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<MediaAssetDeleteResponse>>(
-      `/ocr/assets/by-id/${assetId}`,
-      {
-        method: "DELETE",
-      }
+    return await apiClient.delete<MediaAssetDeleteResponse>(
+      `/api/v1/ocr/assets/by-id/${assetId}`
     );
-    return envelope.data;
   }
 
   /**
@@ -187,11 +169,7 @@ export class OCRService {
   public async addScannedProductToShelf(
     payload: ShelfItemCreateRequest
   ): Promise<ShelfItemResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<ShelfItemResponse>>("/me/shelf", {
-      method: "POST",
-      body: payload,
-    });
-    return envelope.data;
+    return await apiClient.post<ShelfItemResponse>("/api/v1/me/shelf", payload);
   }
 }
 

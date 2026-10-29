@@ -305,7 +305,7 @@ export const DiscoveryPage: React.FC<DiscoveryPageProps> = ({
                 id="filter-sort"
                 value={sortBy}
                 onChange={(e) => {
-                  setSortBy(e.target.value as any);
+                  setSortBy(e.target.value as DiscoveryFilterParams["sort_by"]);
                   setPage(1);
                 }}
                 className="w-full text-xxs p-2 rounded-lg bg-[#0C1217] border border-white/10 text-white focus:outline-none focus:border-emerald-500"

@@ -15,7 +15,6 @@
 import { apiClient } from "./client";
 import {
   CreateSkinJournalEntryRequest,
-  ResponseEnvelope,
   SkinJournalEntryResponse,
   SkinJournalListResponse,
   SkinScanDeleteResponse,
@@ -38,11 +37,7 @@ export class SkinApiService {
    * Requires explicit active consent for 'skin_data_processing'.
    */
   public async createScan(formData: FormData): Promise<SkinScanResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<SkinScanResponse>>("/skin/scans", {
-      method: "POST",
-      body: formData,
-    });
-    return envelope.data;
+    return await apiClient.post<SkinScanResponse>("/api/v1/skin/scans", formData);
   }
 
   /**
@@ -61,11 +56,8 @@ export class SkinApiService {
     if (params.status) searchParams.set("status", params.status);
 
     const qs = searchParams.toString();
-    const endpoint = `/skin/scans${qs ? `?${qs}` : ""}`;
-    const envelope = await apiClient.request<ResponseEnvelope<SkinScanListResponse>>(endpoint, {
-      method: "GET",
-    });
-    return envelope.data;
+    const endpoint = `/api/v1/skin/scans${qs ? `?${qs}` : ""}`;
+    return await apiClient.get<SkinScanListResponse>(endpoint);
   }
 
   /**
@@ -75,38 +67,27 @@ export class SkinApiService {
     scanId: string,
     pollIfProcessing: boolean = false
   ): Promise<SkinScanResponse> {
-    const endpoint = `/skin/scans/${encodeURIComponent(scanId)}?poll_if_processing=${pollIfProcessing}`;
-    const envelope = await apiClient.request<ResponseEnvelope<SkinScanResponse>>(endpoint, {
-      method: "GET",
-    });
-    return envelope.data;
+    const endpoint = `/api/v1/skin/scans/${encodeURIComponent(scanId)}?poll_if_processing=${pollIfProcessing}`;
+    return await apiClient.get<SkinScanResponse>(endpoint);
   }
 
   /**
    * Explicitly poll the external skin analysis provider for a processing scan.
    */
   public async pollScan(scanId: string): Promise<SkinScanResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<SkinScanResponse>>(
-      `/skin/scans/${encodeURIComponent(scanId)}/poll`,
-      {
-        method: "POST",
-        body: JSON.stringify({}),
-      }
+    return await apiClient.post<SkinScanResponse>(
+      `/api/v1/skin/scans/${encodeURIComponent(scanId)}/poll`,
+      {}
     );
-    return envelope.data;
   }
 
   /**
    * Delete a skin scan, all associated visual observations, and purge stored private photos.
    */
   public async deleteScan(scanId: string): Promise<SkinScanDeleteResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<SkinScanDeleteResponse>>(
-      `/skin/scans/${encodeURIComponent(scanId)}`,
-      {
-        method: "DELETE",
-      }
+    return await apiClient.delete<SkinScanDeleteResponse>(
+      `/api/v1/skin/scans/${encodeURIComponent(scanId)}`
     );
-    return envelope.data;
   }
 
   /**
@@ -124,11 +105,8 @@ export class SkinApiService {
       searchParams.set("journal_limit", String(params.journalLimit));
 
     const qs = searchParams.toString();
-    const endpoint = `/skin/story${qs ? `?${qs}` : ""}`;
-    const envelope = await apiClient.request<ResponseEnvelope<SkinStoryResponse>>(endpoint, {
-      method: "GET",
-    });
-    return envelope.data;
+    const endpoint = `/api/v1/skin/story${qs ? `?${qs}` : ""}`;
+    return await apiClient.get<SkinStoryResponse>(endpoint);
   }
 
   /**
@@ -137,14 +115,10 @@ export class SkinApiService {
   public async createJournalEntry(
     payload: CreateSkinJournalEntryRequest
   ): Promise<SkinJournalEntryResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<SkinJournalEntryResponse>>(
-      "/skin/journal",
-      {
-        method: "POST",
-        body: JSON.stringify(payload),
-      }
+    return await apiClient.post<SkinJournalEntryResponse>(
+      "/api/v1/skin/journal",
+      payload
     );
-    return envelope.data;
   }
 
   /**
@@ -161,11 +135,8 @@ export class SkinApiService {
     if (params.offset !== undefined) searchParams.set("offset", String(params.offset));
 
     const qs = searchParams.toString();
-    const endpoint = `/skin/journal${qs ? `?${qs}` : ""}`;
-    const envelope = await apiClient.request<ResponseEnvelope<SkinJournalListResponse>>(endpoint, {
-      method: "GET",
-    });
-    return envelope.data;
+    const endpoint = `/api/v1/skin/journal${qs ? `?${qs}` : ""}`;
+    return await apiClient.get<SkinJournalListResponse>(endpoint);
   }
 }
 

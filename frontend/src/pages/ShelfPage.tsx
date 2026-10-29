@@ -442,7 +442,7 @@ export const ShelfPage: React.FC<ShelfPageProps> = ({ onNavigate, initialItemId 
             <select
               value={sortBy}
               onChange={(e) => {
-                setSortBy(e.target.value as any);
+                setSortBy(e.target.value as "created_at_desc" | "name_asc" | "opened_at_desc");
                 setPage(1);
               }}
               className="text-xxs bg-transparent text-slate-300 border-none focus:outline-none cursor-pointer"

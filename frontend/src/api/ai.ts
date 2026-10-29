@@ -10,7 +10,6 @@ import {
   ApiError,
   ExplanationRequest,
   ExplanationResponse,
-  ResponseEnvelope,
 } from "./types";
 
 export class AiExplanationService {
@@ -55,15 +54,10 @@ export class AiExplanationService {
       payload.search_query = request.search_query.trim().slice(0, 200);
     }
 
-    const res = await apiClient.request<ResponseEnvelope<ExplanationResponse>>(
-      "/ai/explanations",
-      {
-        method: "POST",
-        body: payload,
-      }
+    return await apiClient.post<ExplanationResponse>(
+      "/api/v1/ai/explanations",
+      payload
     );
-
-    return res.data;
   }
 }
 

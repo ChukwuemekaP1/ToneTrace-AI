@@ -58,6 +58,7 @@ export const ScanLabelModal: React.FC<ScanLabelModalProps> = ({
   // Step & Data state
   const [step, setStep] = useState<ScanStep>("select");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCategory, setErrorCategory] = useState<string | null>(null);
@@ -86,7 +87,34 @@ export const ScanLabelModal: React.FC<ScanLabelModalProps> = ({
   // Abort controller ref for cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
+
+  // Sync preview URL with selectedFile
+  useEffect(() => {
+    if (!selectedFile) {
+      if (previewUrl && typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setPreviewUrl(null);
+      return;
+    }
+    if (typeof URL !== "undefined" && typeof URL.createObjectURL === "function") {
+      try {
+        const url = URL.createObjectURL(selectedFile);
+        setPreviewUrl(url);
+        return () => {
+          if (typeof URL.revokeObjectURL === "function") {
+            URL.revokeObjectURL(url);
+          }
+        };
+      } catch {
+        setPreviewUrl(null);
+      }
+    } else {
+      setPreviewUrl(null);
+    }
+  }, [selectedFile]);
 
   // Reset state on open/close
   useEffect(() => {
@@ -522,40 +550,74 @@ export const ScanLabelModal: React.FC<ScanLabelModalProps> = ({
                 </p>
               </div>
 
-              {/* Drag & Drop Area */}
-              <div
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
-                  selectedFile
-                    ? "border-emerald-500/50 bg-emerald-950/10"
-                    : "border-white/15 bg-white/[0.02] hover:border-emerald-500/40 hover:bg-white/[0.04]"
-                }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={handleFileChange}
-                  aria-label="Upload packaging label photo"
-                />
+              {/* Hidden File & Camera Inputs */}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileChange}
+                aria-label="Snap packaging label with camera"
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleFileChange}
+                aria-label="Upload packaging label photo"
+              />
 
-                <div className="flex flex-col items-center justify-center space-y-2">
-                  <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-300">
-                    <UploadCloud className="w-6 h-6 text-emerald-400" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-white block">
-                      {selectedFile ? "Label photo selected" : "Choose label photo or drag & drop"}
-                    </span>
-                    <span className="text-xxs text-slate-400 block mt-0.5">
-                      JPEG, PNG, or WebP up to 5 MB
-                    </span>
+              {/* Snap / Select Action Tiles (Visible when no file chosen) */}
+              {!selectedFile && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* 1. Snap Label with Camera */}
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="group relative p-4 rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-950/30 to-emerald-900/10 hover:from-emerald-950/50 hover:to-emerald-900/20 hover:border-emerald-500/60 transition-all text-left flex flex-col justify-between space-y-3 cursor-pointer shadow-lg shadow-emerald-950/20 active:scale-[0.98]"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+                        <Camera className="w-5 h-5" />
+                      </div>
+                      <Chip variant="verified" size="sm">Camera</Chip>
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-white block">
+                        Snap Label Photo
+                      </span>
+                      <span className="text-xxs text-slate-400 block mt-0.5 leading-snug">
+                        Use device camera to snap packaging ingredients
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* 2. Upload / Drag & Drop Card */}
+                  <div
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="group relative p-4 rounded-2xl border-2 border-dashed border-white/15 bg-white/[0.02] hover:border-white/30 hover:bg-white/[0.04] transition-all text-left flex flex-col justify-between space-y-3 cursor-pointer active:scale-[0.98]"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 group-hover:scale-105 transition-transform">
+                        <UploadCloud className="w-5 h-5 text-slate-300" />
+                      </div>
+                      <span className="text-xxs font-mono text-slate-400">Max 5MB</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-white block">
+                        Upload Image
+                      </span>
+                      <span className="text-xxs text-slate-400 block mt-0.5 leading-snug">
+                        Select screenshot, photo, or drag & drop
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Validation Error Message */}
               {validationError && (
@@ -565,13 +627,41 @@ export const ScanLabelModal: React.FC<ScanLabelModalProps> = ({
                 </div>
               )}
 
-              {/* Selected File Details & Trigger Action */}
+              {/* Snapped/Selected Photo Preview Card */}
               {selectedFile && (
-                <div className="p-3 rounded-xl bg-[#11171E] border border-white/8 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <span className="text-xxs text-slate-400 block">Selected File</span>
-                      <span className="text-xs font-medium text-white block truncate max-w-[200px]">
+                <div className="p-3.5 rounded-2xl bg-[#090D11]/90 border border-white/10 space-y-3">
+                  {/* Photo Preview Frame */}
+                  <div className="relative rounded-xl overflow-hidden bg-black/80 border border-white/10 flex items-center justify-center min-h-[160px] max-h-56">
+                    {previewUrl ? (
+                      <img
+                        src={previewUrl}
+                        alt="Snapped packaging label preview"
+                        className="w-full max-h-56 object-contain"
+                      />
+                    ) : (
+                      <div className="py-10 text-center text-slate-500 text-xs">
+                        Loading photo preview...
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFile(null)}
+                      aria-label="Remove snapped photo"
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-950/80 text-slate-300 hover:text-rose-400 border border-white/15 shadow-md transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="absolute bottom-2 left-2">
+                      <Chip variant="champagne" size="sm">
+                        Ready to Process
+                      </Chip>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between px-0.5">
+                    <div className="space-y-0.5 truncate max-w-[190px]">
+                      <span className="text-xxs text-slate-400 block">Snapped Photo</span>
+                      <span className="text-xs font-semibold text-white block truncate">
                         {selectedFile.name}
                       </span>
                     </div>
@@ -581,16 +671,16 @@ export const ScanLabelModal: React.FC<ScanLabelModalProps> = ({
                       </Chip>
                       <button
                         type="button"
-                        onClick={() => setSelectedFile(null)}
-                        aria-label="Remove selected file"
-                        className="text-slate-400 hover:text-rose-400 transition-colors p-1"
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="text-xxs text-emerald-400 hover:text-emerald-300 font-medium underline flex items-center gap-1"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <RefreshCw className="w-3 h-3" />
+                        Retake
                       </button>
                     </div>
                   </div>
 
-                  <p className="text-xxs text-slate-400">
+                  <p className="text-xxs text-slate-400 px-0.5">
                     Image remains locally on your device until you press "Process Label".
                   </p>
 
@@ -599,7 +689,7 @@ export const ScanLabelModal: React.FC<ScanLabelModalProps> = ({
                     size="md"
                     onClick={handleStartScan}
                     disabled={isSubmitting}
-                    className="w-full flex items-center justify-center gap-2 font-semibold"
+                    className="w-full flex items-center justify-center gap-2 font-semibold shadow-lg shadow-emerald-500/20"
                   >
                     <Camera className="w-4 h-4" />
                     <span>Process Label</span>
@@ -921,7 +1011,7 @@ export const ScanLabelModal: React.FC<ScanLabelModalProps> = ({
                         </label>
                         <select
                           value={shelfStatus}
-                          onChange={(e) => setShelfStatus(e.target.value as any)}
+                          onChange={(e) => setShelfStatus(e.target.value as "in_use" | "wishlist")}
                           className="w-full text-xs p-2 rounded-lg bg-[#0C1217] border border-white/10 text-white focus:outline-none focus:border-emerald-500"
                         >
                           <option value="in_use">In Use</option>

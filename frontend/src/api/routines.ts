@@ -18,7 +18,6 @@ import {
   ReactionListResponse,
   ReminderPreferenceResponse,
   ReminderPreferenceUpdateRequest,
-  ResponseEnvelope,
   RoutineCompletionCreateRequest,
   RoutineCompletionListResponse,
   RoutineCompletionResponse,
@@ -61,15 +60,10 @@ export class RoutineApiService {
     if (params.page) queryParams.page = params.page;
     if (params.page_size) queryParams.page_size = params.page_size;
 
-    const envelope = await apiClient.request<ResponseEnvelope<RoutineListResponse>>(
-      "/me/routines",
-      {
-        method: "GET",
-        params: queryParams,
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.get<RoutineListResponse>("/api/v1/me/routines", {
+      params: queryParams,
+      signal,
+    });
   }
 
   /**
@@ -80,14 +74,7 @@ export class RoutineApiService {
       throw new Error(`Invalid routine identifier: '${routineId}'. Expected canonical UUID.`);
     }
 
-    const envelope = await apiClient.request<ResponseEnvelope<RoutineResponse>>(
-      `/me/routines/${routineId}`,
-      {
-        method: "GET",
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.get<RoutineResponse>(`/api/v1/me/routines/${routineId}`, { signal });
   }
 
   /**
@@ -97,15 +84,7 @@ export class RoutineApiService {
     payload: RoutineCreateRequest,
     signal?: AbortSignal
   ): Promise<RoutineResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<RoutineResponse>>(
-      "/me/routines",
-      {
-        method: "POST",
-        body: payload,
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.post<RoutineResponse>("/api/v1/me/routines", payload, { signal });
   }
 
   /**
@@ -120,15 +99,9 @@ export class RoutineApiService {
       throw new Error(`Invalid routine identifier: '${routineId}'. Expected canonical UUID.`);
     }
 
-    const envelope = await apiClient.request<ResponseEnvelope<RoutineResponse>>(
-      `/me/routines/${routineId}`,
-      {
-        method: "PATCH",
-        body: payload,
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.patch<RoutineResponse>(`/api/v1/me/routines/${routineId}`, payload, {
+      signal,
+    });
   }
 
   /**
@@ -142,14 +115,10 @@ export class RoutineApiService {
       throw new Error(`Invalid routine identifier: '${routineId}'. Expected canonical UUID.`);
     }
 
-    const envelope = await apiClient.request<ResponseEnvelope<{ status: string; routine_id: string }>>(
-      `/me/routines/${routineId}`,
-      {
-        method: "DELETE",
-        signal,
-      }
+    return await apiClient.delete<{ status: string; routine_id: string }>(
+      `/api/v1/me/routines/${routineId}`,
+      { signal }
     );
-    return envelope.data;
   }
 
   /**
@@ -164,15 +133,11 @@ export class RoutineApiService {
       throw new Error(`Invalid routine identifier: '${routineId}'. Expected canonical UUID.`);
     }
 
-    const envelope = await apiClient.request<ResponseEnvelope<RoutineCompletionResponse>>(
-      `/me/routines/${routineId}/completions`,
-      {
-        method: "POST",
-        body: payload,
-        signal,
-      }
+    return await apiClient.post<RoutineCompletionResponse>(
+      `/api/v1/me/routines/${routineId}/completions`,
+      payload,
+      { signal }
     );
-    return envelope.data;
   }
 
   /**
@@ -188,29 +153,20 @@ export class RoutineApiService {
       throw new Error(`Invalid routine identifier: '${routineId}'. Expected canonical UUID.`);
     }
 
-    const envelope = await apiClient.request<ResponseEnvelope<RoutineCompletionListResponse>>(
-      `/me/routines/${routineId}/completions`,
+    return await apiClient.get<RoutineCompletionListResponse>(
+      `/api/v1/me/routines/${routineId}/completions`,
       {
-        method: "GET",
         params: { page, page_size: pageSize },
         signal,
       }
     );
-    return envelope.data;
   }
 
   /**
    * Get the user's reminder preferences and timezone configuration.
    */
   public async getReminders(signal?: AbortSignal): Promise<ReminderPreferenceResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<ReminderPreferenceResponse>>(
-      "/me/reminders",
-      {
-        method: "GET",
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.get<ReminderPreferenceResponse>("/api/v1/me/reminders", { signal });
   }
 
   /**
@@ -220,15 +176,9 @@ export class RoutineApiService {
     payload: ReminderPreferenceUpdateRequest,
     signal?: AbortSignal
   ): Promise<ReminderPreferenceResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<ReminderPreferenceResponse>>(
-      "/me/reminders",
-      {
-        method: "PUT",
-        body: payload,
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.put<ReminderPreferenceResponse>("/api/v1/me/reminders", payload, {
+      signal,
+    });
   }
 
   /**
@@ -238,15 +188,11 @@ export class RoutineApiService {
     payload: StandaloneReactionCreateRequest,
     signal?: AbortSignal
   ): Promise<SafetyAwareReactionResponse> {
-    const envelope = await apiClient.request<ResponseEnvelope<SafetyAwareReactionResponse>>(
-      "/me/product-reactions",
-      {
-        method: "POST",
-        body: payload,
-        signal,
-      }
+    return await apiClient.post<SafetyAwareReactionResponse>(
+      "/api/v1/me/product-reactions",
+      payload,
+      { signal }
     );
-    return envelope.data;
   }
 
   /**
@@ -271,15 +217,10 @@ export class RoutineApiService {
     if (params.page) queryParams.page = params.page;
     if (params.page_size) queryParams.page_size = params.page_size;
 
-    const envelope = await apiClient.request<ResponseEnvelope<ReactionListResponse>>(
-      "/me/product-reactions",
-      {
-        method: "GET",
-        params: queryParams,
-        signal,
-      }
-    );
-    return envelope.data;
+    return await apiClient.get<ReactionListResponse>("/api/v1/me/product-reactions", {
+      params: queryParams,
+      signal,
+    });
   }
 }
 
