@@ -13,11 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Create dedicated virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 COPY pyproject.toml README.md /build/
 COPY app /build/app
 
 RUN pip install --upgrade pip && \
-    pip install --prefix=/install .
+    pip install .
 
 # Stage 2: Minimal runtime image
 FROM python:3.12-slim AS runtime
@@ -26,19 +30,20 @@ WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/install/bin:$PATH" \
+    PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app"
 
 # Install runtime PostgreSQL client library dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create unprivileged non-root user
 RUN groupadd --gid 10001 appgroup && \
     useradd --uid 10001 --gid 10001 --shell /bin/bash --no-create-home appuser
 
-COPY --from=builder /install /install
+COPY --from=builder /opt/venv /opt/venv
 COPY app /app/app
 COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini

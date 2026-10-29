@@ -38,11 +38,18 @@ services:
       - PORT=8000
       - DATABASE_URL=postgresql+psycopg://tonetrace:${POSTGRES_PASSWORD:-tonetrace_secure_password_replace}@postgres:5432/tonetrace_prod
       - ALLOWED_CORS_ORIGINS=["http://localhost","http://localhost:80","http://localhost:3000"]
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - OCR_SPACE_API_KEY=${OCR_SPACE_API_KEY}
-      - YOUCAM_API_KEY=${YOUCAM_API_KEY}
+      - OCR_PROVIDER=${OCR_PROVIDER:-mock}
+      - OCR_API_KEY=${OCR_API_KEY}
+      - SKIN_ANALYSIS_PROVIDER=${SKIN_ANALYSIS_PROVIDER:-mock}
+      - SKIN_ANALYSIS_API_KEY=${SKIN_ANALYSIS_API_KEY}
+      - ELASTICSEARCH_ENABLED=${ELASTICSEARCH_ENABLED:-false}
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ELASTICSEARCH_API_KEY=${ELASTICSEARCH_API_KEY}
+      - COSING_API_KEY=${COSING_API_KEY:-285a77fd-1257-4271-8507-f0c6b2961203}
+      - CHANNEL3_API_KEY=${CHANNEL3_API_KEY}
+      - STORAGE_PROVIDER=${STORAGE_PROVIDER:-postgres}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

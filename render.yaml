@@ -20,16 +20,30 @@ services:
         fromDatabase:
           name: tonetrace-postgres
           property: connectionString
-      - key: JWT_SECRET_KEY
+      - key: AUTH_JWT_SECRET
         generateValue: true
+      - key: ELASTICSEARCH_ENABLED
+        value: "false"
       - key: ELASTICSEARCH_URL
+        sync: false
+      - key: ELASTICSEARCH_API_KEY
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: OCR_SPACE_API_KEY
+      - key: OCR_PROVIDER
+        value: ocr_space
+      - key: OCR_API_KEY
         sync: false
-      - key: YOUCAM_API_KEY
+      - key: COSING_API_KEY
+        value: 285a77fd-1257-4271-8507-f0c6b2961203
+      - key: CHANNEL3_API_KEY
         sync: false
+      - key: SKIN_ANALYSIS_PROVIDER
+        value: mock
+      - key: SKIN_ANALYSIS_API_KEY
+        sync: false
+      - key: STORAGE_PROVIDER
+        value: postgres
 
   # ---------------------------------------------------------------------------
   # ToneTrace Frontend Web Application
