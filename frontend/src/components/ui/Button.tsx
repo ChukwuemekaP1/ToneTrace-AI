@@ -28,7 +28,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const baseStyles =
       "relative inline-flex items-center justify-center font-medium transition-all duration-150 select-none " +
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#080C0F] " +
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white " +
       "disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]";
 
     const sizeStyles = {
@@ -39,14 +39,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variantStyles = {
       primary:
-        "bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold shadow-sm hover:shadow-glow",
+        "bg-charcoal hover:bg-slate-800 text-white font-semibold shadow-sm",
       secondary:
-        "bg-surface-elevated hover:bg-surface-elevated/80 text-slate-200 border border-white/10 hover:border-white/20",
+        "bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200",
       outline:
-        "bg-transparent hover:bg-white/5 text-slate-200 border border-white/15 hover:border-white/30",
+        "bg-transparent hover:bg-slate-100 text-slate-700 border border-slate-300",
       danger:
-        "bg-adverse/20 hover:bg-adverse/30 text-rose-300 border border-adverse/40 hover:border-adverse/60",
-      ghost: "bg-transparent hover:bg-white/5 text-slate-300 hover:text-white",
+        "bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200",
+      ghost: "bg-transparent hover:bg-slate-100 text-slate-600 hover:text-slate-900",
       champagne:
         "bg-champagne hover:bg-champagne-light text-slate-950 font-semibold shadow-sm",
     };

@@ -110,14 +110,14 @@ export const AppHome: React.FC<AppHomeProps> = ({ onNavigateTab, onHealthChange 
           <Chip variant="verified" size="sm" showDot>
             System Online
           </Chip>
-          <span className="text-xxs text-slate-400 font-mono">FastAPI + Neon</span>
+          <span className="text-xxs text-slate-500 font-mono">FastAPI + Neon</span>
         </div>
 
         <div>
-          <h2 className="text-base font-bold text-white tracking-tight">
+          <h2 className="text-base font-bold text-slate-900 tracking-tight">
             Scientific Skincare Intelligence
           </h2>
-          <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+          <p className="text-xs text-slate-600 mt-1 leading-relaxed">
             ToneTrace AI pairs cosmetic formulation science, regulatory CosIng databases, and
             grounded dermatological explanations.
           </p>
@@ -138,56 +138,56 @@ export const AppHome: React.FC<AppHomeProps> = ({ onNavigateTab, onHealthChange 
       {/* Backend Infrastructure Overview */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-0.5">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
             Verified Subsystems
           </h3>
-          <span className="text-xxs text-emerald-400 font-mono">10 Modules Live</span>
+          <span className="text-xxs text-brand font-mono font-semibold">10 Modules Live</span>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
           <GlassCard variant="default" padding="sm" className="space-y-1">
-            <div className="flex items-center gap-1.5 text-emerald-400">
+            <div className="flex items-center gap-1.5 text-brand">
               <Database className="w-3.5 h-3.5" />
-              <span className="text-xs font-semibold text-slate-200">Neon Postgres</span>
+              <span className="text-xs font-semibold text-slate-800">Neon Postgres</span>
             </div>
-            <p className="text-xxs text-slate-400">Authoritative store & BYTEA media</p>
+            <p className="text-xxs text-slate-500">Authoritative store & BYTEA media</p>
           </GlassCard>
 
           <GlassCard variant="default" padding="sm" className="space-y-1">
-            <div className="flex items-center gap-1.5 text-emerald-400">
+            <div className="flex items-center gap-1.5 text-brand">
               <Search className="w-3.5 h-3.5" />
-              <span className="text-xs font-semibold text-slate-200">Catalog Search</span>
+              <span className="text-xs font-semibold text-slate-800">Catalog Search</span>
             </div>
-            <p className="text-xxs text-slate-400">Elasticsearch 8.x + DB fallback</p>
+            <p className="text-xxs text-slate-500">Elasticsearch 8.x + DB fallback</p>
           </GlassCard>
 
           <GlassCard variant="default" padding="sm" className="space-y-1">
-            <div className="flex items-center gap-1.5 text-champagne">
+            <div className="flex items-center gap-1.5 text-amber-600">
               <BookOpen className="w-3.5 h-3.5" />
-              <span className="text-xs font-semibold text-slate-200">Evidence</span>
+              <span className="text-xs font-semibold text-slate-800">Evidence</span>
             </div>
-            <p className="text-xxs text-slate-400">EC CosIng & PubMed abstracts</p>
+            <p className="text-xxs text-slate-500">EC CosIng & PubMed abstracts</p>
           </GlassCard>
 
           <GlassCard variant="default" padding="sm" className="space-y-1">
-            <div className="flex items-center gap-1.5 text-amber-400">
+            <div className="flex items-center gap-1.5 text-brand">
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span className="text-xs font-semibold text-slate-200">Safe Routines</span>
+              <span className="text-xs font-semibold text-slate-800">Safe Routines</span>
             </div>
-            <p className="text-xxs text-slate-400">Urgent-care reaction guardrails</p>
+            <p className="text-xxs text-slate-500">Urgent-care reaction guardrails</p>
           </GlassCard>
         </div>
       </div>
 
       {/* Epistemic Transparency Disclaimer */}
-      <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/5 space-y-1">
-        <div className="flex items-center gap-1.5 text-slate-300">
-          <Activity className="w-3.5 h-3.5 text-emerald-400" />
+      <div className="p-3.5 rounded-xl bg-slate-100 border border-slate-200 space-y-1">
+        <div className="flex items-center gap-1.5 text-slate-700">
+          <Activity className="w-3.5 h-3.5 text-brand" />
           <span className="text-xxs font-semibold uppercase tracking-wider">
             Epistemic Disclaimer
           </span>
         </div>
-        <p className="text-xxs text-slate-400 leading-relaxed">
+        <p className="text-xxs text-slate-500 leading-relaxed">
           ToneTrace does not provide medical diagnoses or replace licensed dermatological consultation. Efficacy cannot be inferred from ingredient names alone, and cosmetic scans reflect non-clinical visual observations.
         </p>
       </div>

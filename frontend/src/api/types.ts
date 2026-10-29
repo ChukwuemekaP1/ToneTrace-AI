@@ -392,6 +392,8 @@ export interface SkinScanResponse {
   created_at: string;
   completed_at?: string | null;
   deleted_at?: string | null;
+  is_mock?: boolean | null;
+  provider_environment?: string | null;
   // Backward compatibility convenience fields
   analyzed_at?: string | null;
   lighting_condition?: string;

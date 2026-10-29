@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+from google import genai
+from google.genai import types
 
 from app.core.config import get_settings
 from app.providers.base import BaseProvider
@@ -942,9 +944,241 @@ class YouCamSkinAnalysisAdapter(BaseSkinAnalysisProvider):
             return await self._poll_once(client, provider_task_id)
 
 
+GEMINI_SKIN_SYSTEM_PROMPT = """You are an expert dermatological cosmetic visual skin analysis specialist.
+Your task is to analyze a photograph of a human face and provide standardized visual surface observations.
+
+IMPORTANT SAFETY & NON-CLINICAL RULES:
+1. First verify if a human face is clearly visible. If no face is present or the image is too blurry/dark, return JSON with {"face_detected": false, "error_message": "No clear human face detected."}.
+2. These are cosmetic visual surface observations, NOT a clinical diagnosis or medical treatment plan.
+3. For each requested observation, evaluate on a 0 to 100 scale (higher indicates clearer, healthier, calmer, or smoother skin appearance):
+   - "spots": Tone evenness and absence of visible surface hyperpigmentation or dark spots (higher = clearer tone)
+   - "redness": Absence of visible surface redness/erythema (higher = calmer, less redness)
+   - "texture": Surface smoothness and lack of roughness (higher = smoother texture)
+   - "pores": Pore refinement and minimal visibility (higher = tighter, less noticeable pores)
+   - "wrinkles": Smoothness and absence of visible fine lines (higher = smoother, fewer lines)
+   - "acne": Clarity and absence of visible blemishes, pustules, or active breakouts (higher = clearer skin)
+   - "oiliness": Surface shine balance (higher = balanced, neither overly oily nor parched)
+   - "moisture": Plumpness and hydration appearance (higher = well-hydrated look)
+   - "radiance": Healthy natural luminosity (higher = more radiant)
+   - "firmness": Structural firmness appearance (higher = firm)
+   - "dark_circles": Absence of visible periorbital shadowing (higher = brighter under-eyes)
+   - "eye_bags": Smoothness of under-eye contours without visible puffiness (higher = smoother)
+4. Assign the primary facial zone for each observation where the feature is most notable:
+   - "forehead"
+   - "cheeks"
+   - "t_zone"
+   - "chin"
+   - "periorbital"
+   - "full_face"
+5. Identify the overall score (0-100) and dominant skin type: "normal", "dry", "oily", "combination", or "sensitive".
+6. Return ONLY a single raw valid JSON object matching this schema:
+{
+  "face_detected": true,
+  "overall_score": 78.0,
+  "skin_type": "combination",
+  "observations": [
+    {
+      "metric_code": "spots",
+      "display_value": 75.0,
+      "facial_zone": "cheeks",
+      "summary": "Light surface post-inflammatory tone variation"
+    }
+  ]
+}
+"""
+
+
+class GeminiSkinAnalysisAdapter(BaseSkinAnalysisProvider):
+    """Multimodal skin analysis adapter using Google Gemini Vision (google-genai SDK).
+
+    Provides real-time visual inspection of facial characteristics (blemishes, redness,
+    pores, texture smoothness, hydration appearance, fine lines) mapped to localized
+    facial zones without canned or mock data.
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        timeout_seconds: float = 30.0,
+        genai_client: genai.Client | None = None,
+    ) -> None:
+        settings = get_settings()
+        resolved_key = (
+            api_key
+            or (settings.GEMINI_API_KEY.get_secret_value() if settings.GEMINI_API_KEY else None)
+        )
+        self._api_key = resolved_key
+        self._model = (model or settings.GEMINI_MODEL or "gemini-2.5-flash").strip()
+        self._timeout = timeout_seconds
+        self._client = genai_client
+
+    @property
+    def name(self) -> str:
+        return "gemini"
+
+    @property
+    def provider_model_version(self) -> str:
+        return f"gemini-skin-{self._model}"
+
+    def _get_client(self) -> genai.Client:
+        if self._client is not None:
+            return self._client
+        if not self._api_key:
+            raise SkinAnalysisConfigurationError(
+                "Gemini API key is not configured. Supply a valid GEMINI_API_KEY in the environment."
+            )
+        return genai.Client(api_key=self._api_key)
+
+    async def check_health(self) -> tuple[bool, str | None]:
+        if not self._api_key:
+            return False, "GEMINI_API_KEY is not configured for Gemini skin analysis."
+        return True, f"Gemini Skin Analysis active using model '{self._model}'."
+
+    async def submit_scan(
+        self,
+        file_bytes: bytes,
+        filename: str,
+        content_type: str,
+        requested_metrics: list[str] | None = None,
+    ) -> SkinAnalysisTaskResult:
+        if not file_bytes:
+            raise SkinAnalysisInvalidImageError("Empty image bytes provided for skin analysis.")
+
+        client = self._get_client()
+        metrics_to_request = requested_metrics or list(DEFAULT_REQUESTED_METRICS)
+
+        image_part = types.Part.from_bytes(
+            data=file_bytes,
+            mime_type=content_type or "image/jpeg",
+        )
+
+        user_prompt = (
+            f"Analyze this facial photo for the following cosmetic visual metrics: "
+            f"{', '.join(metrics_to_request)}. Return the specified JSON object."
+        )
+
+        try:
+            response = await asyncio.wait_for(
+                client.aio.models.generate_content(
+                    model=self._model,
+                    contents=[image_part, user_prompt],
+                    config=types.GenerateContentConfig(
+                        system_instruction=GEMINI_SKIN_SYSTEM_PROMPT,
+                        response_mime_type="application/json",
+                        temperature=0.2,
+                    ),
+                ),
+                timeout=self._timeout,
+            )
+        except asyncio.TimeoutError as err:
+            logger.error("Gemini skin analysis timed out after %.1fs", self._timeout)
+            raise SkinAnalysisTimeoutError(f"Gemini skin analysis timed out after {self._timeout}s") from err
+        except Exception as exc:
+            err_str = str(exc)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+                logger.warning("Gemini skin analysis rate limit or quota exceeded: %s", exc)
+                raise SkinAnalysisRateLimitError(
+                    "Gemini AI quota or rate limit exceeded. Please try again shortly."
+                ) from exc
+            logger.error("Gemini skin analysis request failed: %s", exc)
+            raise SkinAnalysisUnavailableError(f"Gemini skin analysis error: {exc}") from exc
+
+        text_payload = (response.text or "").strip()
+        if not text_payload:
+            raise SkinAnalysisInvalidImageError("Gemini Vision was unable to process this image.")
+
+        try:
+            parsed = json.loads(text_payload)
+        except json.JSONDecodeError as exc:
+            logger.error("Failed to parse Gemini skin analysis JSON payload: %s", text_payload)
+            raise SkinAnalysisError("Malformed JSON response from Gemini skin analysis.") from exc
+
+        if parsed.get("face_detected") is False:
+            msg = parsed.get("error_message") or "No clear human face detected in image."
+            raise SkinAnalysisInvalidImageError(msg)
+
+        raw_observations = parsed.get("observations") or []
+        observations: list[NormalizedObservationResult] = []
+        seen_metrics: set[str] = set()
+
+        for item in raw_observations:
+            if not isinstance(item, dict):
+                continue
+            code = str(item.get("metric_code", "")).strip().lower()
+            spec = NORMALIZED_METRICS.get(code)
+            if not spec or spec.metric_code in seen_metrics:
+                continue
+
+            raw_val = float(item.get("display_value", 70.0))
+            clamped = max(0.0, min(100.0, round(raw_val, 1)))
+            zone = str(item.get("facial_zone", spec.default_zone)).strip().lower()
+            if zone not in ("forehead", "cheeks", "left_cheek", "right_cheek", "t_zone", "chin", "periorbital", "full_face"):
+                zone = spec.default_zone
+
+            seen_metrics.add(spec.metric_code)
+            observations.append(
+                NormalizedObservationResult(
+                    metric_code=spec.metric_code,
+                    metric_label=spec.label,
+                    raw_value=clamped,
+                    display_value=clamped,
+                    unit=spec.unit,
+                    directionality=spec.directionality,
+                    facial_zone=zone,
+                    confidence=0.92,
+                    caveat_note=STANDARD_OBSERVATION_CAVEAT,
+                )
+            )
+
+        overall_score = parsed.get("overall_score")
+        if overall_score is not None:
+            try:
+                overall_score = max(0.0, min(100.0, round(float(overall_score), 1)))
+            except (ValueError, TypeError):
+                overall_score = None
+
+        if overall_score is None and observations:
+            overall_score = round(sum(o.display_value for o in observations) / len(observations), 1)
+
+        skin_type = parsed.get("skin_type")
+        if isinstance(skin_type, str):
+            skin_type = skin_type.strip().lower()
+
+        task_id = f"gemini-{hashlib.sha256(file_bytes[:128]).hexdigest()[:16]}"
+
+        return SkinAnalysisTaskResult(
+            provider_name=self.name,
+            provider_task_id=task_id,
+            provider_model_version=self.provider_model_version,
+            interpretation_version=self.interpretation_version,
+            status="succeeded",
+            observations=observations,
+            overall_score=overall_score,
+            skin_type_observation=skin_type,
+        )
+
+    async def poll_task(self, provider_task_id: str) -> SkinAnalysisTaskResult:
+        return SkinAnalysisTaskResult(
+            provider_name=self.name,
+            provider_task_id=provider_task_id,
+            provider_model_version=self.provider_model_version,
+            interpretation_version=self.interpretation_version,
+            status="succeeded",
+        )
+
+
 def get_skin_analysis_provider() -> BaseSkinAnalysisProvider:
     """Resolve the configured skin analysis provider adapter."""
     settings = get_settings()
-    if settings.SKIN_ANALYSIS_PROVIDER == "youcam":
+    provider = settings.SKIN_ANALYSIS_PROVIDER.lower()
+    if provider == "youcam":
+        if settings.SKIN_ANALYSIS_API_KEY:
+            return YouCamSkinAnalysisAdapter()
+        # Fallback to Gemini if YouCam key is missing but Gemini key is available
+        if settings.GEMINI_API_KEY:
+            return GeminiSkinAnalysisAdapter()
         return YouCamSkinAnalysisAdapter()
+    if provider == "gemini":
+        return GeminiSkinAnalysisAdapter()
     return MockSkinAnalysisAdapter()

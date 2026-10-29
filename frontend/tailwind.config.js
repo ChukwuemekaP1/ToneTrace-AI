@@ -7,35 +7,47 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "#080C0F",
+        background: "#F7F8F6",
         surface: {
-          DEFAULT: "#10161C",
-          subtle: "#0C1115",
-          elevated: "#172027",
-          border: "rgba(255, 255, 255, 0.08)",
-          hover: "rgba(255, 255, 255, 0.04)",
+          DEFAULT: "#FFFFFF",
+          subtle: "#F9FAFB",
+          elevated: "#FFFFFF",
+          border: "#E5E7EB",
+          hover: "#F3F4F6",
         },
         brand: {
-          DEFAULT: "#10B981", // Clinical emerald
-          light: "#34D399",
-          dark: "#059669",
-          muted: "rgba(16, 185, 129, 0.15)",
+          DEFAULT: "#3D6B58", // Botanical sage green
+          light: "#527E6A",
+          dark: "#2A4B3D",
+          muted: "#EAF2ED",
+        },
+        charcoal: {
+          DEFAULT: "#181E24", // Premium dark focal element (health report pills, scan button)
+          light: "#262E35",
+          muted: "#F0F2F4",
+        },
+        autumn: {
+          terracotta: "#C87D65",
+          sand: "#EFE8E2",
+          rose: "#D9A5A5",
+          olive: "#6C7A68",
+          slate: "#64748B",
         },
         champagne: {
-          DEFAULT: "#E0C39E", // Cosmetic luxury accent
-          light: "#EAD5BC",
-          dark: "#C7A67D",
-          muted: "rgba(224, 195, 158, 0.15)",
+          DEFAULT: "#D8BC97", // Warm porcelain luxury accent
+          light: "#EADCC9",
+          dark: "#B8966E",
+          muted: "rgba(216, 188, 151, 0.18)",
         },
         caution: {
-          DEFAULT: "#F59E0B",
-          light: "#FBBF24",
-          muted: "rgba(245, 158, 11, 0.15)",
+          DEFAULT: "#D97706",
+          light: "#F59E0B",
+          muted: "rgba(245, 158, 11, 0.12)",
         },
         adverse: {
-          DEFAULT: "#EF4444",
-          light: "#F87171",
-          muted: "rgba(239, 68, 68, 0.15)",
+          DEFAULT: "#DC2626",
+          light: "#EF4444",
+          muted: "rgba(239, 68, 68, 0.12)",
         },
       },
       fontFamily: {

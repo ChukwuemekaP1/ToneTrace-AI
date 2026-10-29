@@ -152,9 +152,9 @@ class Settings(BaseSettings):
     EVIDENCE_CACHE_TTL_HOURS: int = 168
 
     # --------------------------------------------------------------------------
-    # 8. Skin Analysis Engine (Perfect Corp / YouCam S2S API)
+    # 8. Skin Analysis Engine (Perfect Corp / YouCam S2S API & Gemini Vision)
     # --------------------------------------------------------------------------
-    SKIN_ANALYSIS_PROVIDER: Literal["youcam", "mock"] = "mock"
+    SKIN_ANALYSIS_PROVIDER: Literal["youcam", "gemini", "mock"] = "gemini"
     SKIN_ANALYSIS_API_KEY: SecretStr | None = None
     SKIN_ANALYSIS_SECRET_KEY: SecretStr | None = None
     SKIN_ANALYSIS_BASE_URL: str = "https://yce-api-01.makeupar.com"

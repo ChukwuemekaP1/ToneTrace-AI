@@ -41,7 +41,7 @@ services:
       - key: CHANNEL3_API_KEY
         sync: false
       - key: SKIN_ANALYSIS_PROVIDER
-        value: mock
+        value: gemini
       - key: SKIN_ANALYSIS_API_KEY
         sync: false
       - key: STORAGE_PROVIDER

@@ -42,7 +42,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#040608] flex justify-center items-start antialiased text-slate-100 overflow-x-hidden">
+    <div className="min-h-screen w-full bg-[#ECEEEA] flex justify-center items-start antialiased text-slate-800 overflow-x-hidden">
       {/* 
         Mobile Device Container:
         - Baseline: 390px
@@ -51,19 +51,17 @@ export const MobileShell: React.FC<MobileShellProps> = ({
       */}
       <div
         data-testid="mobile-shell-container"
-        className="w-full max-w-[430px] min-h-screen flex flex-col relative bg-[#090D11] border-x border-white/[0.07] shadow-2xl overflow-x-hidden"
+        className="w-full max-w-[430px] min-h-screen flex flex-col relative bg-[#F8F9FA] border-x border-slate-200 shadow-2xl overflow-x-hidden"
       >
         {/* Top Status Bar / Header */}
-        <header className="sticky top-0 z-30 bg-[#090D11]/90 backdrop-blur-md border-b border-white/[0.08] px-4 py-3 flex items-center justify-between">
+        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 flex items-center justify-between shadow-soft">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-emerald-400 p-0.5 flex items-center justify-center shadow-glow shrink-0">
-              <div className="w-full h-full bg-[#090D11] rounded-[10px] flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-emerald-400" />
-              </div>
+            <div className="w-8 h-8 rounded-xl bg-brand/10 border border-brand/20 p-0.5 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4 text-brand" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-sm font-bold tracking-tight text-white leading-none">
+                <h1 className="text-sm font-bold tracking-tight text-slate-900 leading-none">
                   {headerTitle}
                 </h1>
                 {backendHealthy !== null && (
@@ -71,14 +69,14 @@ export const MobileShell: React.FC<MobileShellProps> = ({
                     data-testid="backend-health-pill"
                     className={`inline-block w-2 h-2 rounded-full ${
                       backendHealthy
-                        ? "bg-emerald-400 shadow-[0_0_8px_#34D399]"
-                        : "bg-amber-400 shadow-[0_0_8px_#FBBF24]"
+                        ? "bg-brand shadow-[0_0_8px_#527E6A]"
+                        : "bg-amber-500 shadow-[0_0_8px_#F59E0B]"
                     }`}
                     title={backendHealthy ? "Backend connected" : "Backend offline or connecting..."}
                   />
                 )}
               </div>
-              <p className="text-xxs text-slate-400 mt-0.5 leading-none">{headerSubtitle}</p>
+              <p className="text-xxs text-slate-500 mt-0.5 leading-none">{headerSubtitle}</p>
             </div>
           </div>
 
@@ -97,7 +95,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({
             <div
               className={
                 showMoreMenu
-                  ? "mb-2 p-2.5 rounded-2xl bg-[#0C1217]/95 backdrop-blur-xl border border-white/12 shadow-2xl grid grid-cols-3 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150"
+                  ? "mb-2 p-2.5 rounded-2xl bg-white/95 backdrop-blur-xl border border-slate-200 shadow-xl grid grid-cols-3 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150"
                   : "sr-only"
               }
               aria-label="Additional navigation options"
@@ -108,8 +106,8 @@ export const MobileShell: React.FC<MobileShellProps> = ({
                 aria-label="Routines"
                 className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all text-xxs ${
                   activeTab === "routines"
-                    ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-400 font-semibold"
-                    : "bg-white/[0.03] border-white/5 text-slate-300 hover:border-white/15"
+                    ? "bg-brand/10 border-brand/30 text-brand font-semibold"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"
                 }`}
               >
                 <Calendar className="w-4 h-4" />
@@ -122,8 +120,8 @@ export const MobileShell: React.FC<MobileShellProps> = ({
                 aria-label="Profile"
                 className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all text-xxs ${
                   activeTab === "profile"
-                    ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-400 font-semibold"
-                    : "bg-white/[0.03] border-white/5 text-slate-300 hover:border-white/15"
+                    ? "bg-brand/10 border-brand/30 text-brand font-semibold"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"
                 }`}
               >
                 <User className="w-4 h-4" />
@@ -137,8 +135,8 @@ export const MobileShell: React.FC<MobileShellProps> = ({
                 title="Design System Showcase"
                 className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all text-xxs ${
                   activeTab === "showcase"
-                    ? "bg-champagne/20 border-champagne/40 text-champagne font-semibold"
-                    : "bg-white/[0.03] border-white/5 text-slate-300 hover:border-white/15"
+                    ? "bg-autumn-sand border-autumn-terracotta/40 text-autumn-terracotta font-semibold"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"
                 }`}
               >
                 <Code2 className="w-4 h-4" />
@@ -150,7 +148,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({
             <nav
               data-testid="mobile-bottom-nav"
               aria-label="Primary navigation"
-              className="w-full bg-[#0C1217]/90 backdrop-blur-2xl border border-white/12 rounded-2xl px-3 py-1.5 flex items-center justify-between shadow-glass"
+              className="w-full bg-white/95 backdrop-blur-2xl border border-slate-200/90 rounded-2xl px-3 py-1.5 flex items-center justify-between shadow-[0_8px_30px_rgba(0,0,0,0.08)]"
             >
               {/* Button 1: Home */}
               <button
@@ -159,27 +157,25 @@ export const MobileShell: React.FC<MobileShellProps> = ({
                 onClick={() => handleSelectTab("home")}
                 className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all ${
                   activeTab === "home"
-                    ? "text-emerald-400 font-semibold"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "text-brand font-semibold"
+                    : "text-slate-400 hover:text-slate-600"
                 }`}
               >
                 <Compass className="w-5 h-5" />
                 <span className="text-xxs tracking-tight">Home</span>
               </button>
 
-              {/* Button 2: Scan (Hero Action) */}
+              {/* Button 2: Scan (Hero Floating Button - Inspired by Image 2) */}
               <button
                 type="button"
                 aria-label="Scan a Label"
                 onClick={() => handleSelectTab("scan")}
                 className="flex flex-col items-center -translate-y-2 group focus:outline-none"
               >
-                <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-emerald-600 to-emerald-400 p-0.5 shadow-glow flex items-center justify-center transition-transform group-hover:scale-105 active:scale-95">
-                  <div className="w-full h-full bg-[#090D11] rounded-full flex items-center justify-center">
-                    <Camera className="w-5 h-5 text-emerald-400" />
-                  </div>
+                <div className="w-12 h-12 rounded-full bg-charcoal text-white shadow-md flex items-center justify-center transition-transform group-hover:scale-105 active:scale-95">
+                  <Camera className="w-5 h-5" />
                 </div>
-                <span className="text-xxs tracking-tight text-emerald-400 font-medium mt-0.5">
+                <span className="text-xxs tracking-tight text-slate-700 font-medium mt-0.5">
                   Scan
                 </span>
               </button>
@@ -191,8 +187,8 @@ export const MobileShell: React.FC<MobileShellProps> = ({
                 onClick={() => handleSelectTab("shelf")}
                 className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all ${
                   activeTab === "shelf"
-                    ? "text-emerald-400 font-semibold"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "text-brand font-semibold"
+                    : "text-slate-400 hover:text-slate-600"
                 }`}
               >
                 <BookmarkCheck className="w-5 h-5" />
@@ -207,8 +203,8 @@ export const MobileShell: React.FC<MobileShellProps> = ({
                 onClick={() => setShowMoreMenu((prev) => !prev)}
                 className={`p-1.5 rounded-xl transition-colors ${
                   showMoreMenu
-                    ? "text-white bg-white/10"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "text-slate-900 bg-slate-100"
+                    : "text-slate-400 hover:text-slate-600"
                 }`}
                 title="More navigation"
               >

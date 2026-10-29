@@ -13,7 +13,10 @@ import pytest
 from PIL import Image
 
 from app.providers.skin_analysis import (
+    GeminiSkinAnalysisAdapter,
     MockSkinAnalysisAdapter,
+    SkinAnalysisConfigurationError,
+    SkinAnalysisInvalidImageError,
     SkinAnalysisRateLimitError,
     YouCamSkinAnalysisAdapter,
     get_skin_analysis_provider,
@@ -599,3 +602,106 @@ async def test_youcam_s2s_v2_adapter_contract_with_simulated_transport():
         )
     await mock_client.aclose()
     await rl_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_gemini_skin_analysis_adapter_success():
+    """Verify GeminiSkinAnalysisAdapter parses multimodal vision output and normalizes zones."""
+    import json
+
+    canned_payload = {
+        "face_detected": True,
+        "overall_score": 81.5,
+        "skin_type": "combination",
+        "observations": [
+            {
+                "metric_code": "acne",
+                "display_value": 85.0,
+                "facial_zone": "forehead",
+                "summary": "Clear forehead",
+            },
+            {
+                "metric_code": "redness",
+                "display_value": 72.0,
+                "facial_zone": "cheeks",
+                "summary": "Mild cheek redness",
+            },
+            {
+                "metric_code": "pores",
+                "display_value": 68.0,
+                "facial_zone": "t_zone",
+                "summary": "Enlarged pores around nasal bridge",
+            },
+        ],
+    }
+
+    class FakeResponse:
+        text = json.dumps(canned_payload)
+
+    class FakeModelsAsync:
+        async def generate_content(self, *args, **kwargs):
+            return FakeResponse()
+
+    class FakeAio:
+        models = FakeModelsAsync()
+
+    class FakeClient:
+        aio = FakeAio()
+
+    adapter = GeminiSkinAnalysisAdapter(api_key="fake-gemini-key", genai_client=FakeClient())
+    assert adapter.name == "gemini"
+    assert "gemini-skin-" in adapter.provider_model_version
+
+    result = await adapter.submit_scan(
+        file_bytes=_make_test_image_bytes(),
+        filename="face.jpg",
+        content_type="image/jpeg",
+        requested_metrics=["acne", "redness", "pores"],
+    )
+    assert result.status == "succeeded"
+    assert result.overall_score == 81.5
+    assert result.skin_type_observation == "combination"
+    assert len(result.observations) == 3
+    obs_by_code = {o.metric_code: o for o in result.observations}
+    assert obs_by_code["acne"].facial_zone == "forehead"
+    assert obs_by_code["redness"].facial_zone == "cheeks"
+    assert obs_by_code["pores"].facial_zone == "t_zone"
+
+
+@pytest.mark.asyncio
+async def test_gemini_skin_analysis_adapter_unconfigured():
+    """Verify GeminiSkinAnalysisAdapter raises SkinAnalysisConfigurationError when unconfigured."""
+    adapter = GeminiSkinAnalysisAdapter(api_key=None)
+    with pytest.raises(SkinAnalysisConfigurationError, match="not configured"):
+        await adapter.submit_scan(
+            file_bytes=b"bytes",
+            filename="face.jpg",
+            content_type="image/jpeg",
+        )
+
+
+@pytest.mark.asyncio
+async def test_gemini_skin_analysis_adapter_no_face_detected():
+    """Verify GeminiSkinAnalysisAdapter raises SkinAnalysisInvalidImageError when no face detected."""
+    import json
+
+    class FakeResponse:
+        text = json.dumps({"face_detected": False, "error_message": "No human face detected."})
+
+    class FakeModelsAsync:
+        async def generate_content(self, *args, **kwargs):
+            return FakeResponse()
+
+    class FakeAio:
+        models = FakeModelsAsync()
+
+    class FakeClient:
+        aio = FakeAio()
+
+    adapter = GeminiSkinAnalysisAdapter(api_key="fake-key", genai_client=FakeClient())
+    with pytest.raises(SkinAnalysisInvalidImageError, match="No human face detected"):
+        await adapter.submit_scan(
+            file_bytes=b"cat.jpg",
+            filename="cat.jpg",
+            content_type="image/jpeg",
+        )

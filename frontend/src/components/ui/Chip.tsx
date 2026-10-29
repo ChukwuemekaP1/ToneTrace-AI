@@ -24,19 +24,19 @@ export const Chip: React.FC<ChipProps> = ({
   };
 
   const variantStyles = {
-    verified: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25",
-    caution: "bg-amber-500/10 text-amber-300 border-amber-500/25",
-    adverse: "bg-rose-500/10 text-rose-300 border-rose-500/25",
-    neutral: "bg-white/5 text-slate-300 border-white/10",
-    champagne: "bg-champagne/10 text-champagne border-champagne/30",
+    verified: "bg-brand/10 text-brand border-brand/25 font-medium",
+    caution: "bg-amber-500/10 text-amber-700 border-amber-500/25",
+    adverse: "bg-rose-500/10 text-rose-700 border-rose-500/25",
+    neutral: "bg-slate-100 text-slate-600 border-slate-200",
+    champagne: "bg-champagne/20 text-slate-800 border-champagne/40",
   };
 
   const dotStyles = {
-    verified: "bg-emerald-400",
-    caution: "bg-amber-400",
-    adverse: "bg-rose-400",
+    verified: "bg-brand",
+    caution: "bg-amber-500",
+    adverse: "bg-rose-500",
     neutral: "bg-slate-400",
-    champagne: "bg-champagne",
+    champagne: "bg-champagne-dark",
   };
 
   return (
